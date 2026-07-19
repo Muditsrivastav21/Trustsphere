@@ -3,11 +3,7 @@
 # TrustSphere AI
 ### Real-Time Identity Trust & Adaptive Authentication Platform
 
-<br />
 
-**Live Application:** [https://trustsphere-web.onrender.com/](https://trustsphere-web.onrender.com/)
-
-<br />
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
