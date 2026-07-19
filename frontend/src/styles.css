@@ -35,6 +35,19 @@
   --color-ring: var(--ring);
   --color-ring-offset-background: var(--background);
 
+  /* Semantic Theme Variables */
+  --color-page-bg: var(--page-bg);
+  --color-panel-bg: var(--panel-bg);
+  --color-panel-border: var(--panel-border);
+  --color-glass-bg: var(--glass-bg);
+  --color-glass-border: var(--glass-border);
+  --color-glass-hover: var(--glass-hover);
+  --color-text-main: var(--text-main);
+  --color-text-sub: var(--text-sub);
+  --color-text-dim: var(--text-dim);
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-border: var(--sidebar-border);
+
   --color-bob-orange: #F26522;
   --color-bob-orange-deep: #D4521A;
   --color-bob-orange-muted: #F2652215;
@@ -75,6 +88,34 @@
   --border: #1E3248;
   --input: #1E3248;
   --ring: #F26522;
+  
+  /* Light Theme (Default) */
+  --page-bg: #F4F7F9;
+  --panel-bg: rgba(255, 255, 255, 0.85);
+  --panel-border: rgba(0, 0, 0, 0.08);
+  --glass-bg: rgba(0, 0, 0, 0.03);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-hover: rgba(0, 0, 0, 0.06);
+  --text-main: #142233;
+  --text-sub: #4D6478;
+  --text-dim: #8FA3B4;
+  --sidebar-bg: #FFFFFF;
+  --sidebar-border: rgba(0, 0, 0, 0.08);
+}
+
+.dark {
+  /* Dark Theme */
+  --page-bg: #0D1B2A;
+  --panel-bg: rgba(16, 24, 39, 0.8);
+  --panel-border: rgba(255, 255, 255, 0.05);
+  --glass-bg: rgba(0, 0, 0, 0.3);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-hover: rgba(0, 0, 0, 0.5);
+  --text-main: #FFFFFF;
+  --text-sub: rgba(255, 255, 255, 0.7);
+  --text-dim: rgba(255, 255, 255, 0.4);
+  --sidebar-bg: #0D1B2A;
+  --sidebar-border: #1E3248;
 }
 
 @layer base {
@@ -83,8 +124,8 @@
   }
 
   html, body {
-    background-color: var(--color-navy);
-    color: var(--color-text-primary);
+    background-color: var(--color-page-bg);
+    color: var(--color-text-main);
     font-family: var(--font-sans);
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
@@ -109,8 +150,8 @@
     font-size: 11px;
   }
   .surface-card {
-    background: var(--color-navy-mid);
-    border: 1px solid var(--color-navy-border);
+    background: var(--color-panel-bg);
+    border: 1px solid var(--color-panel-border);
     border-radius: 16px;
   }
   .surface-card-hover {

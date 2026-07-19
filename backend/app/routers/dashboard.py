@@ -56,10 +56,14 @@ def stats_overview(current_user: dict = Depends(get_current_user)):
         scores = [r.get("trust_score", 0) for r in rows]
         avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
 
-        # Fraud rings from graph_nodes
+        # Fraud rings from graph graph_service (Neo4j / Mock)
         try:
-            fraud_rings = sb.table("graph_nodes").select("id").eq("node_type", "FRAUD_RING").execute()
-            fraud_count = len(fraud_rings.data) if fraud_rings.data else 0
+            from app.services.graph_service import read_graph_nodes
+            graph_data = read_graph_nodes(filter_type="fraud_only")
+            fraud_count = sum(1 for n in graph_data.get("nodes", []) if n.get("type") == "FRAUD_RING")
+            if fraud_count == 0:
+                fraud_rings = sb.table("graph_nodes").select("id").eq("node_type", "FRAUD_RING").execute()
+                fraud_count = len(fraud_rings.data) if fraud_rings.data else 0
         except Exception:
             fraud_count = 0
 
@@ -133,3 +137,56 @@ def risk_distribution(current_user: dict = Depends(get_current_user)):
         high=counts["HIGH"],
         critical=counts["CRITICAL"],
     )
+
+
+@router.get("/users")
+def get_users_list(current_user: dict = Depends(get_current_user)):
+    """Fetch real users from the database with aggregate trust stats."""
+    if current_user.get("role") not in ("analyst", "admin"):
+        raise HTTPException(status_code=403, detail="Permission denied")
+        
+    sb = get_supabase()
+    try:
+        # Fetch all users
+        users_res = sb.table("users").select("id, name, customer_id, account_type, email, role").execute()
+        users_data = users_res.data or []
+        
+        # Fetch all login events to compute aggregates
+        events_res = sb.table("login_events").select("user_id, trust_score, device_hash").execute()
+        events_data = events_res.data or []
+        
+        # Group events by user_id
+        user_events = {}
+        for event in events_data:
+            uid = event.get("user_id")
+            if uid not in user_events:
+                user_events[uid] = []
+            user_events[uid].append(event)
+            
+        result = []
+        for u in users_data:
+            uid = u["id"]
+            u_evs = user_events.get(uid, [])
+            
+            # Compute stats
+            sessions_count = len(u_evs)
+            avg_trust = round(sum(e["trust_score"] for e in u_evs) / sessions_count) if sessions_count > 0 else 100
+            unique_devices = len(set(e.get("device_hash") for e in u_evs if e.get("device_hash")))
+            if unique_devices == 0:
+                unique_devices = 1 # Default
+                
+            result.append({
+                "name": u["name"],
+                "id": u["customer_id"],
+                "trust": avg_trust,
+                "type": u.get("account_type") or "Savings",
+                "sessions": sessions_count,
+                "devices": unique_devices,
+                "email": u.get("email") or "",
+                "role": u.get("role") or "customer"
+            })
+            
+        return result
+    except Exception as e:
+        logger.error(f"Failed to fetch users list: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

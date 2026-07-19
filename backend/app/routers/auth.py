@@ -101,6 +101,10 @@ async def login(request: Request, req: LoginRequest, background_tasks: Backgroun
         network_result["network_score"],
     )
 
+    # Bypass OTP for analyst users
+    if user.get("role") == "analyst" and score_result["auth_action"] == "OTP":
+        score_result["auth_action"] = "ALLOW"
+
     # 7. Generate session ID
     session_id = generate_session_id()
 
@@ -288,3 +292,18 @@ def continuous_auth(req: ContinuousAuthRequest):
 
     return {"status": status, "score": behavior_result["behavior_score"], "flags": all_flags}
 
+@router.post("/freeze")
+def freeze_account(current_user: dict = Depends(get_current_user)):
+    """Emergency Kill Switch: Freeze the user's account."""
+    sb = get_supabase()
+    
+    sb.table("users").update({"risk_profile": "FROZEN"}).eq("id", current_user["id"]).execute()
+    
+    from app.services.session_service import create_audit_log
+    create_audit_log(
+        event_type="ACCOUNT_FROZEN",
+        description="User triggered emergency kill switch.",
+        metadata={"user_id": current_user["id"], "customer_id": current_user.get("customer_id")}
+    )
+    
+    return {"status": "success", "message": "Account has been frozen."}

@@ -78,6 +78,8 @@ function ResultPage() {
   }
 
   const d = result;
+  const otpRequiredAndNotVerified = d.auth_action === "OTP" && !otpStatus?.verified;
+
   const banner =
     d.auth_action === "ALLOW" ? { cls: "bg-[rgba(0,196,140,0.1)] border-[var(--color-success)]/40 text-[var(--color-success)]", icon: "✓", text: `Access granted — Welcome, ${d.user.name}` } :
     d.auth_action === "OTP"   ? { cls: "bg-[rgba(245,166,35,0.1)] border-[var(--color-warning)]/40 text-[var(--color-warning)]", icon: "!", text: "OTP required — Unusual activity detected" } :
@@ -201,9 +203,30 @@ function ResultPage() {
             )}
 
             <div className="mt-10 flex gap-4 justify-center relative z-10">
-              <Link to="/dashboard" className="px-8 py-3.5 rounded-xl border border-white/10 text-white/70 hover:text-white hover:bg-white/5 transition-all font-semibold shadow-sm backdrop-blur-sm tracking-wide">View full report</Link>
-              {d.auth_action !== "BLOCK" && <button className="px-10 py-3.5 rounded-xl bg-gradient-to-r from-[var(--color-bob-orange)] to-[var(--color-bob-orange-deep)] text-white font-bold shadow-[0_4px_20px_rgba(242,101,34,0.4)] hover:shadow-[0_6px_25px_rgba(242,101,34,0.6)] hover:-translate-y-1 transition-all tracking-wide">Continue to banking</button>}
-              {d.auth_action === "BLOCK" && <Link to="/login" className="px-10 py-3.5 rounded-xl bg-gradient-to-r from-[var(--color-danger)] to-red-800 text-white font-bold shadow-[0_4px_20px_rgba(232,56,79,0.4)] hover:shadow-[0_6px_25px_rgba(232,56,79,0.6)] hover:-translate-y-1 transition-all tracking-wide">Back to login</Link>}
+              <Link 
+                to="/dashboard" 
+                disabled={otpRequiredAndNotVerified}
+                className={`px-8 py-3.5 rounded-xl border border-white/10 text-white/70 hover:text-white hover:bg-white/5 transition-all font-semibold shadow-sm backdrop-blur-sm tracking-wide ${otpRequiredAndNotVerified ? 'opacity-40 pointer-events-none' : ''}`}
+              >
+                View full report
+              </Link>
+              {d.auth_action !== "BLOCK" && (
+                <Link 
+                  to="/transfer" 
+                  disabled={otpRequiredAndNotVerified}
+                  className={`px-10 py-3.5 rounded-xl bg-gradient-to-r from-[var(--color-bob-orange)] to-[var(--color-bob-orange-deep)] text-white font-bold shadow-[0_4px_20px_rgba(242,101,34,0.4)] hover:shadow-[0_6px_25px_rgba(242,101,34,0.6)] hover:-translate-y-1 transition-all tracking-wide flex items-center justify-center ${otpRequiredAndNotVerified ? 'opacity-40 pointer-events-none' : ''}`}
+                >
+                  Continue to banking
+                </Link>
+              )}
+              {d.auth_action === "BLOCK" && (
+                <Link 
+                  to="/login" 
+                  className="px-10 py-3.5 rounded-xl bg-gradient-to-r from-[var(--color-danger)] to-red-800 text-white font-bold shadow-[0_4px_20px_rgba(232,56,79,0.4)] hover:shadow-[0_6px_25px_rgba(232,56,79,0.6)] hover:-translate-y-1 transition-all tracking-wide"
+                >
+                  Back to login
+                </Link>
+              )}
             </div>
 
             <div className="mt-10 text-center font-mono text-[9px] text-white/20 uppercase tracking-[0.25em] relative z-10">

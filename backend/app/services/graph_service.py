@@ -133,19 +133,261 @@ def write_login_to_graph(
         logger.error(f"Neo4j write failed: {e}")
 
 
+# In-memory mock database state
+_mock_nodes: list[dict] = []
+_mock_edges: list[dict] = []
+_fraud_simulated = False
+
+def initialize_mock_graph():
+    global _mock_nodes, _mock_edges
+    if _mock_nodes:
+        return
+    
+    users = [
+        {"cid": "BOB001", "name": "Rahul Sharma", "city": "Lucknow", "email": "rahul.sharma@email.com"},
+        {"cid": "BOB002", "name": "Priya Mehta", "city": "Mumbai", "email": "priya.mehta@email.com"},
+        {"cid": "BOB003", "name": "Arvind Kapoor", "city": "Delhi", "email": "arvind.kapoor@email.com"},
+        {"cid": "BOB004", "name": "Sneha Iyer", "city": "Bengaluru", "email": "sneha.iyer@email.com"},
+        {"cid": "BOB005", "name": "Mohammed Raza", "city": "Hyderabad", "email": "mohammed.raza@email.com"},
+        {"cid": "BOB006", "name": "Aarti Patel", "city": "Ahmedabad", "email": "aarti.patel@email.com"},
+        {"cid": "BOB007", "name": "Karan Tandon", "city": "Jaipur", "email": "karan.tandon@email.com"},
+        {"cid": "BOB008", "name": "Divya Nair", "city": "Chennai", "email": "divya.nair@email.com"},
+    ]
+    devices = [
+        {"hash": "fp_mac_chrome_001", "ua": "MacBook Pro · Chrome/125"},
+        {"hash": "fp_iphone_safari_002", "ua": "iPhone 15 · Safari/604"},
+        {"hash": "fp_win_chrome_003", "ua": "Windows 11 · Chrome/125"},
+        {"hash": "fp_pixel_chrome_004", "ua": "Pixel 8 · Chrome/125"},
+        {"hash": "fp_ipad_safari_005", "ua": "iPad · Safari/604"},
+    ]
+    ips = [
+        {"addr": "103.21.124.8", "city": "Lucknow", "flagged": False},
+        {"addr": "49.207.211.17", "city": "Pune", "flagged": False},
+        {"addr": "182.74.99.10", "city": "Mumbai", "flagged": False},
+        {"addr": "45.33.32.156", "city": "San Jose", "flagged": True},
+    ]
+
+    # Create Node mappings
+    for u in users:
+        _mock_nodes.append({
+            "id": u["cid"],
+            "type": "USER",
+            "label": u["name"],
+            "risk_flag": False,
+            "connections": 0
+        })
+        _mock_nodes.append({
+            "id": u["email"],
+            "type": "EMAIL",
+            "label": u["email"],
+            "risk_flag": False,
+            "connections": 0
+        })
+        _mock_edges.append({
+            "source": u["cid"],
+            "target": u["email"],
+            "relationship": "HAS_EMAIL",
+            "suspicious": False
+        })
+        
+    for d in devices:
+        _mock_nodes.append({
+            "id": d["hash"],
+            "type": "DEVICE",
+            "label": d["ua"][:30],
+            "risk_flag": False,
+            "connections": 0
+        })
+
+    for ip in ips:
+        _mock_nodes.append({
+            "id": ip["addr"],
+            "type": "IP",
+            "label": ip["addr"],
+            "risk_flag": ip["flagged"],
+            "connections": 0
+        })
+
+    user_device_mapping = [
+        ("BOB001", "fp_mac_chrome_001"),
+        ("BOB001", "fp_win_chrome_003"),
+        ("BOB002", "fp_iphone_safari_002"),
+        ("BOB003", "fp_win_chrome_003"),
+        ("BOB003", "fp_pixel_chrome_004"),
+        ("BOB004", "fp_ipad_safari_005"),
+        ("BOB005", "fp_mac_chrome_001"),
+        ("BOB006", "fp_iphone_safari_002"),
+        ("BOB007", "fp_pixel_chrome_004"),
+        ("BOB008", "fp_win_chrome_003"),
+    ]
+    for cid, dev_hash in user_device_mapping:
+        _mock_edges.append({
+            "source": cid,
+            "target": dev_hash,
+            "relationship": "USES",
+            "suspicious": False
+        })
+
+    user_ip_mapping = [
+        ("BOB001", "103.21.124.8"),
+        ("BOB002", "49.207.211.17"),
+        ("BOB003", "182.74.99.10"),
+        ("BOB004", "103.21.124.8"),
+        ("BOB005", "49.207.211.17"),
+        ("BOB006", "182.74.99.10"),
+        ("BOB007", "45.33.32.156"),
+        ("BOB008", "45.33.32.156"),
+    ]
+    for cid, addr in user_ip_mapping:
+        _mock_edges.append({
+            "source": cid,
+            "target": addr,
+            "relationship": "LOGGED_FROM",
+            "suspicious": False
+        })
+
+    # Base Fraud Ring
+    _mock_nodes.append({
+        "id": "ring_45_33_32_156",
+        "type": "FRAUD_RING",
+        "label": "Ring ring_45_33_32_156",
+        "risk_flag": True,
+        "connections": 0
+    })
+    for cid in ["BOB007", "BOB008"]:
+        _mock_edges.append({
+            "source": cid,
+            "target": "ring_45_33_32_156",
+            "relationship": "SUSPECTED_MEMBER_OF",
+            "suspicious": True
+        })
+        # Mark users in fraud ring as suspicious/risk_flag
+        for node in _mock_nodes:
+            if node["id"] == cid:
+                node["risk_flag"] = True
+                
+    _mock_edges.append({
+        "source": "45.33.32.156",
+        "target": "ring_45_33_32_156",
+        "relationship": "ASSOCIATED_WITH",
+        "suspicious": True
+    })
+    _mock_edges.append({
+        "source": "fp_pixel_chrome_004",
+        "target": "ring_45_33_32_156",
+        "relationship": "LINKED_TO",
+        "suspicious": True
+    })
+    # Mark device as risk_flag
+    for node in _mock_nodes:
+        if node["id"] == "fp_pixel_chrome_004":
+            node["risk_flag"] = True
+
+    recompute_mock_connections()
+
+def recompute_mock_connections():
+    global _mock_nodes, _mock_edges
+    conn_map = {}
+    for edge in _mock_edges:
+        src = edge["source"]
+        tgt = edge["target"]
+        conn_map[src] = conn_map.get(src, 0) + 1
+        conn_map[tgt] = conn_map.get(tgt, 0) + 1
+    for node in _mock_nodes:
+        node["connections"] = conn_map.get(node["id"], 0)
+
+def simulate_fraud_ring_in_mock():
+    global _mock_nodes, _mock_edges, _fraud_simulated
+    if _fraud_simulated:
+        return
+    _fraud_simulated = True
+    malicious_ip_id = "ip_malicious_99"
+    _mock_nodes.append({
+        "id": malicious_ip_id,
+        "type": "FRAUD_RING",
+        "label": "Malicious IP (Botnet)",
+        "risk_flag": True,
+        "connections": 0
+    })
+    for i in range(20):
+        fake_user_id = f"synthetic_user_{i}"
+        _mock_nodes.append({
+            "id": fake_user_id,
+            "type": "USER",
+            "label": f"Synthetic Mule {i}",
+            "risk_flag": True,
+            "connections": 0
+        })
+        _mock_edges.append({
+            "source": malicious_ip_id,
+            "target": fake_user_id,
+            "relationship": "MASS_CREATION",
+            "suspicious": True
+        })
+    # Takeover attempt on an existing user (e.g. BOB001)
+    _mock_edges.append({
+        "source": malicious_ip_id,
+        "target": "BOB001",
+        "relationship": "ATO_ATTEMPT",
+        "suspicious": True
+    })
+    recompute_mock_connections()
+
+
+def simulate_fraud_ring() -> dict:
+    """
+    Simulate a fraud ring by inserting nodes into Neo4j (if available)
+    and/or updating the in-memory mock fallback graph.
+    """
+    initialize_mock_graph()
+    simulate_fraud_ring_in_mock()
+    
+    driver = get_neo4j_driver()
+    neo4j_success = False
+    try:
+        with driver.session() as session:
+            malicious_ip_id = "ip_malicious_99"
+            session.run(
+                """
+                MERGE (f:FraudRing {id: $rid})
+                  ON CREATE SET f.detected_at = datetime(), f.severity = 'CRITICAL', f.label = 'Malicious IP (Botnet)'
+                """,
+                rid=malicious_ip_id
+            )
+            for i in range(20):
+                fake_user_id = f"synthetic_user_{i}"
+                fake_name = f"Synthetic Mule {i}"
+                session.run(
+                    """
+                    MERGE (u:User {customer_id: $cid})
+                      ON CREATE SET u.name = $name, u.created_at = datetime(), u.is_flagged = true
+                    WITH u
+                    MATCH (f:FraudRing {id: $rid})
+                    MERGE (u)-[:SUSPECTED_MEMBER_OF]->(f)
+                    """,
+                    cid=fake_user_id,
+                    name=fake_name,
+                    rid=malicious_ip_id
+                )
+            session.run(
+                """
+                MATCH (f:FraudRing {id: $rid}), (u:User)
+                WHERE u.customer_id = 'BOB001'
+                MERGE (u)-[:ATO_ATTEMPT]->(f)
+                """,
+                rid=malicious_ip_id
+            )
+        neo4j_success = True
+        logger.info("Successfully simulated fraud ring in Neo4j database")
+    except Exception as e:
+        logger.error(f"Failed to simulate fraud ring in Neo4j: {e}")
+        
+    return {"status": "success", "neo4j": neo4j_success, "message": "Fraud ring simulated successfully"}
+
+
 def read_graph_nodes(filter_type: str = "all") -> dict:
     """
     Read nodes and edges from Neo4j for the D3 visualization.
-
-    Parameters
-    ----------
-    filter_type : str
-        "all" — return everything (limit 300)
-        "fraud_only" — only paths touching FraudRing nodes (limit 200)
-
-    Returns
-    -------
-    dict with 'nodes' and 'edges' lists.
     """
     driver = get_neo4j_driver()
     nodes_map: dict[str, dict] = {}
@@ -179,7 +421,6 @@ def read_graph_nodes(filter_type: str = "all") -> dict:
                     if node_id not in nodes_map:
                         labels = list(node.labels)
                         node_type = labels[0] if labels else "UNKNOWN"
-                        # Map Neo4j labels to frontend types
                         type_map = {
                             "User": "USER", "Device": "DEVICE",
                             "IP": "IP", "Email": "EMAIL",
@@ -187,7 +428,6 @@ def read_graph_nodes(filter_type: str = "all") -> dict:
                         }
                         mapped_type = type_map.get(node_type, node_type)
 
-                        # Build label
                         props = dict(node)
                         if mapped_type == "USER":
                             label = props.get("name", props.get("customer_id", node_id))
@@ -213,12 +453,11 @@ def read_graph_nodes(filter_type: str = "all") -> dict:
                             "connections": 0,
                         }
 
-                # Edge
                 source_id = str(rel.start_node.element_id)
                 target_id = str(rel.end_node.element_id)
                 rel_type = rel.type
 
-                suspicious = rel_type in ("SUSPECTED_MEMBER_OF", "ASSOCIATED_WITH", "LINKED_TO")
+                suspicious = rel_type in ("SUSPECTED_MEMBER_OF", "ASSOCIATED_WITH", "LINKED_TO", "ATO_ATTEMPT", "MASS_CREATION")
                 edges_list.append({
                     "source": source_id,
                     "target": target_id,
@@ -226,26 +465,52 @@ def read_graph_nodes(filter_type: str = "all") -> dict:
                     "suspicious": suspicious,
                 })
 
-                # Increment connection counts
                 if source_id in nodes_map:
                     nodes_map[source_id]["connections"] += 1
                 if target_id in nodes_map:
                     nodes_map[target_id]["connections"] += 1
 
+        # Check if we actually loaded anything from Neo4j
+        if not nodes_map:
+            raise ValueError("No data returned from Neo4j session")
+
+        # Deduplicate edges
+        seen_edges: set[str] = set()
+        unique_edges = []
+        for edge in edges_list:
+            key = f"{edge['source']}-{edge['target']}-{edge['relationship']}"
+            rev_key = f"{edge['target']}-{edge['source']}-{edge['relationship']}"
+            if key not in seen_edges and rev_key not in seen_edges:
+                seen_edges.add(key)
+                unique_edges.append(edge)
+
+        return {
+            "nodes": list(nodes_map.values()),
+            "edges": unique_edges,
+        }
+
     except Exception as e:
-        logger.error(f"Neo4j read failed: {e}")
-
-    # Deduplicate edges
-    seen_edges: set[str] = set()
-    unique_edges = []
-    for edge in edges_list:
-        key = f"{edge['source']}-{edge['target']}-{edge['relationship']}"
-        rev_key = f"{edge['target']}-{edge['source']}-{edge['relationship']}"
-        if key not in seen_edges and rev_key not in seen_edges:
-            seen_edges.add(key)
-            unique_edges.append(edge)
-
-    return {
-        "nodes": list(nodes_map.values()),
-        "edges": unique_edges,
-    }
+        logger.error(f"Neo4j read failed, falling back to stateful mock: {e}")
+        initialize_mock_graph()
+        
+        filtered_nodes = []
+        filtered_edges = []
+        
+        if filter_type == "fraud_only":
+            fraud_node_ids = {n["id"] for n in _mock_nodes if n["type"] == "FRAUD_RING" or n["risk_flag"]}
+            for edge in _mock_edges:
+                if edge["source"] in fraud_node_ids or edge["target"] in fraud_node_ids or edge["suspicious"]:
+                    filtered_edges.append(edge)
+            
+            used_node_ids = {e["source"] for e in filtered_edges} | {e["target"] for e in filtered_edges}
+            for node in _mock_nodes:
+                if node["id"] in used_node_ids or node["type"] == "FRAUD_RING" or node["risk_flag"]:
+                    filtered_nodes.append(node)
+        else:
+            filtered_nodes = _mock_nodes
+            filtered_edges = _mock_edges
+            
+        return {
+            "nodes": filtered_nodes,
+            "edges": filtered_edges
+        }

@@ -1,4 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
 import { BobLogo } from "./BobLogo";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -18,7 +19,9 @@ const getItems = (role: string | null) => {
     return items;
   }
   return [
+    { to: "/dashboard", label: "Trust Dashboard", icon: <path d="M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z"/> },
     { to: "/dashboard/sessions", label: "My Sessions", icon: <path d="M4 5h16v3H4zm0 6h16v3H4zm0 6h16v3H4z"/> },
+    { to: "/dashboard/settings", label: "Settings", icon: <path d="M19 12c0-.5 0-1-.1-1.5l2.1-1.6-2-3.4-2.5 1a7 7 0 00-2.6-1.5L13.5 2h-3l-.4 2.9a7 7 0 00-2.6 1.5l-2.5-1-2 3.4 2.1 1.6c-.1.5-.1 1-.1 1.5s0 1 .1 1.5L3 14.5l2 3.4 2.5-1c.8.6 1.7 1.1 2.6 1.5l.4 2.9h3l.4-2.9a7 7 0 002.6-1.5l2.5 1 2-3.4-2.1-1.6c.1-.5.1-1 .1-1.5zM12 15a3 3 0 110-6 3 3 0 010 6z"/> },
   ];
 };
 
@@ -36,14 +39,17 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-[260px] shrink-0 h-screen sticky top-0 bg-gradient-to-b from-[var(--color-navy)] to-[var(--color-navy-mid)] border-r border-[var(--color-navy-border)] flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.2)] z-20">
-      <div className="px-6 py-6 border-b border-[var(--color-navy-border)]">
+    <aside className="w-[260px] shrink-0 h-screen sticky top-0 bg-[var(--color-sidebar-bg)] border-r border-[var(--color-sidebar-border)] flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.05)] z-20">
+      <div className="px-6 py-6 border-b border-[var(--color-sidebar-border)]">
         <Link to="/" className="block hover:opacity-80 transition-opacity"><BobLogo /></Link>
       </div>
       <nav className="flex-1 px-4 py-6 flex flex-col gap-1.5 overflow-y-auto custom-scrollbar">
-        <div className="label-caps text-[var(--color-text-muted)] px-3 mb-3 flex items-center gap-2">
-          <span className="w-1 h-1 rounded-full bg-[var(--color-text-muted)]"></span>
-          Workspace
+        <div className="flex items-center justify-between px-3 mb-3">
+          <div className="label-caps text-[var(--color-text-dim)] flex items-center gap-2">
+            <span className="w-1 h-1 rounded-full bg-[var(--color-text-dim)]"></span>
+            Workspace
+          </div>
+          <ThemeToggle />
         </div>
         {items.map(it => {
           const active = pathname === it.to || (it.to !== "/dashboard" && pathname.startsWith(it.to));
@@ -54,7 +60,7 @@ export function Sidebar() {
               className={`group relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all duration-300 overflow-hidden ${
                 isActive
                   ? "text-[var(--color-bob-orange)] font-semibold shadow-sm"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:translate-x-1"
+                  : "text-[var(--color-text-sub)] hover:text-[var(--color-text-main)] hover:translate-x-1"
               }`}>
               {/* Active Background with Gradient */}
               <div className={`absolute inset-0 bg-gradient-to-r from-[var(--color-bob-orange)]/15 to-transparent transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-30'}`}></div>
@@ -62,7 +68,7 @@ export function Sidebar() {
               {/* Active Indicator Line */}
               <span className={`absolute left-0 top-1/4 bottom-1/4 w-[3px] rounded-r-full bg-[var(--color-bob-orange)] transition-all duration-300 origin-left ${isActive ? 'scale-x-100 opacity-100' : 'scale-x-0 opacity-0 group-hover:scale-x-100 group-hover:opacity-50'}`} />
               
-              <div className={`relative z-10 flex items-center justify-center p-1.5 rounded-lg transition-colors duration-300 ${isActive ? 'bg-[var(--color-bob-orange)]/20 text-[var(--color-bob-orange)] shadow-inner' : 'bg-transparent text-[var(--color-text-secondary)] group-hover:text-[var(--color-text-primary)] group-hover:bg-[var(--color-navy-border)]/50'}`}>
+              <div className={`relative z-10 flex items-center justify-center p-1.5 rounded-lg transition-colors duration-300 ${isActive ? 'bg-[var(--color-bob-orange)]/20 text-[var(--color-bob-orange)] shadow-inner' : 'bg-transparent text-[var(--color-text-sub)] group-hover:text-[var(--color-text-main)] group-hover:bg-[var(--color-glass-border)]'}`}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" className="transition-transform duration-300 group-hover:scale-110">{it.icon}</svg>
               </div>
               <span className="relative z-10 tracking-wide">{it.label}</span>
@@ -72,8 +78,8 @@ export function Sidebar() {
       </nav>
       
       {/* Premium Interactive Logout Card */}
-      <div className="p-4 mt-auto border-t border-[var(--color-navy-border)] bg-[var(--color-navy)]/50 backdrop-blur-sm">
-        <div className="group relative bg-[var(--color-navy-mid)] border border-[var(--color-navy-border)] rounded-xl p-3 transition-all duration-300 hover:border-[var(--color-bob-orange)]/50 hover:shadow-[0_0_20px_rgba(242,101,34,0.15)] hover:-translate-y-0.5 overflow-hidden cursor-pointer">
+      <div className="p-4 mt-auto border-t border-[var(--color-sidebar-border)] bg-[var(--color-sidebar-bg)] backdrop-blur-sm">
+        <div className="group relative bg-[var(--color-glass-bg)] border border-[var(--color-sidebar-border)] rounded-xl p-3 transition-all duration-300 hover:border-[var(--color-bob-orange)]/50 hover:shadow-[0_0_20px_rgba(242,101,34,0.15)] hover:-translate-y-0.5 overflow-hidden cursor-pointer">
           {/* Subtle gradient background on hover */}
           <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-bob-orange)]/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
           
@@ -84,8 +90,8 @@ export function Sidebar() {
             </div>
             
             <div className="flex-1 min-w-0 transition-all duration-300 group-hover:opacity-0 group-hover:-translate-x-2">
-              <div className="text-xs font-semibold text-[var(--color-text-primary)] truncate">{user?.email || "Unknown User"}</div>
-              <div className="text-[10px] text-[var(--color-text-secondary)] font-mono uppercase tracking-wider mt-0.5 flex items-center gap-1.5">
+              <div className="text-xs font-semibold text-[var(--color-text-main)] truncate">{user?.email || "Unknown User"}</div>
+              <div className="text-[10px] text-[var(--color-text-sub)] font-mono uppercase tracking-wider mt-0.5 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] animate-pulse"></span>
                 {role || "CUSTOMER"}
               </div>
@@ -109,7 +115,7 @@ export function Sidebar() {
 
 export function DashHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: React.ReactNode }) {
   return (
-    <header className="flex items-end justify-between border-b border-[var(--color-navy-border)] pb-5 mb-8 bg-[var(--color-navy)]/80 backdrop-blur-xl sticky top-0 z-10 pt-8 -mt-7 -mx-8 px-8 shadow-sm">
+    <header className="flex items-end justify-between border-b border-[var(--color-sidebar-border)] pb-5 mb-8 bg-[var(--color-page-bg)]/80 backdrop-blur-xl sticky top-0 z-10 pt-8 -mt-7 -mx-8 px-8 shadow-sm">
       <div className="animate-fade-in-up">
         <div className="flex items-center gap-2 mb-1.5">
           <div className="relative flex items-center justify-center">
@@ -118,10 +124,44 @@ export function DashHeader({ title, subtitle, actions }: { title: string; subtit
           </div>
           <div className="label-caps text-[var(--color-bob-orange)] tracking-widest">Trustsphere · Live</div>
         </div>
-        <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-[var(--color-text-secondary)]">{title}</h1>
-        {subtitle && <p className="text-sm text-[var(--color-text-secondary)] mt-2 max-w-2xl leading-relaxed">{subtitle}</p>}
+        <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-[var(--color-text-main)] to-[var(--color-text-sub)]">{title}</h1>
+        {subtitle && <p className="text-sm text-[var(--color-text-sub)] mt-2 max-w-2xl leading-relaxed">{subtitle}</p>}
       </div>
       {actions && <div className="flex items-center gap-3 animate-fade-in pb-1">{actions}</div>}
     </header>
+  );
+}
+
+function ThemeToggle() {
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== "undefined") {
+      return document.documentElement.classList.contains("dark") || 
+             (!("theme" in localStorage) && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  }, [isDark]);
+
+  return (
+    <button 
+      onClick={() => setIsDark(!isDark)}
+      className="p-1.5 rounded-lg bg-[var(--color-glass-bg)] border border-[var(--color-glass-border)] text-[var(--color-text-sub)] hover:text-[var(--color-text-main)] hover:bg-[var(--color-glass-hover)] transition-colors"
+      title="Toggle Theme"
+    >
+      {isDark ? (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+      ) : (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+      )}
+    </button>
   );
 }

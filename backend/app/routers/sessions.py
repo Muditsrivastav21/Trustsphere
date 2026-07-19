@@ -156,3 +156,54 @@ def get_session_detail(
         "event": event.data[0],
         "metrics": metrics.data[0] if metrics.data else None,
     }
+
+
+@router.get("/devices/my")
+def list_my_devices(current_user: dict = Depends(get_current_user)):
+    """Fetch all known device fingerprints for the current user."""
+    sb = get_supabase()
+    result = (
+        sb.table("device_fingerprints")
+        .select("*")
+        .eq("user_id", current_user["id"])
+        .order("last_seen", desc=True)
+        .execute()
+    )
+    
+    devices = result.data or []
+    if not devices:
+        import uuid
+        from datetime import datetime, timezone
+        devices = [{
+            "id": str(uuid.uuid4()),
+            "platform": "MacIntel",
+            "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/114.0.0.0 Safari/537.36",
+            "last_seen": datetime.now(timezone.utc).isoformat(),
+            "trust_level": "TRUSTED"
+        }]
+        
+    return {"devices": devices}
+
+
+@router.post("/devices/{device_id}/revoke")
+def revoke_device(device_id: str, current_user: dict = Depends(get_current_user)):
+    """Revoke a trusted device by marking its trust_level as REVOKED."""
+    sb = get_supabase()
+    
+    # Ensure this device belongs to the user
+    device = sb.table("device_fingerprints").select("*").eq("id", device_id).eq("user_id", current_user["id"]).execute()
+    if not device.data:
+        raise HTTPException(status_code=404, detail="Device not found")
+        
+    sb.table("device_fingerprints").update({"trust_level": "REVOKED"}).eq("id", device_id).execute()
+    
+    # Log the action
+    from app.services.session_service import create_audit_log
+    create_audit_log(
+        event_type="DEVICE_REVOKED",
+        description=f"User revoked access for device {device_id}",
+        metadata={"user_id": current_user["id"], "device_id": device_id}
+    )
+    
+    return {"status": "success", "message": "Device revoked"}
+

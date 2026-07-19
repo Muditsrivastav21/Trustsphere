@@ -24,3 +24,13 @@ async def get_graph_nodes(filter: str = Query("all")):
         nodes=data["nodes"],
         edges=data["edges"],
     )
+
+
+@router.post("/simulate")
+async def post_simulate_fraud_ring():
+    """
+    Inject simulated fraud ring into Neo4j/Mock DB.
+    """
+    from app.services.graph_service import simulate_fraud_ring
+    res = simulate_fraud_ring()
+    return res

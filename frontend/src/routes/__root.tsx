@@ -13,7 +13,7 @@ import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--color-navy)] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--color-page-bg)] px-4">
       <div className="max-w-md text-center">
         <div className="font-mono text-[11px] label-caps text-[var(--color-bob-orange)]">Error 404</div>
         <h1 className="mt-3 text-6xl font-bold tracking-tight text-[var(--color-text-primary)]">Page not found</h1>
@@ -33,7 +33,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--color-navy)] px-4">
+    <div className="flex min-h-screen items-center justify-center bg-[var(--color-page-bg)] px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight">Something went wrong</h1>
         <p className="mt-2 text-sm text-[var(--color-text-secondary)]">An unexpected error interrupted this view.</p>
@@ -83,13 +83,16 @@ function RootShell({ children }: { children: ReactNode }) {
 }
 
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ContinuousTrustProvider } from "@/contexts/ContinuousTrustProvider";
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <Outlet />
+        <ContinuousTrustProvider>
+          <Outlet />
+        </ContinuousTrustProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

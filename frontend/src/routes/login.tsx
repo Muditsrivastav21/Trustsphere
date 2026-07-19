@@ -23,8 +23,17 @@ function LoginPage() {
   
   const [activeSignal, setActiveSignal] = useState(false);
   const signalTimeoutRef = useRef<number | null>(null);
+  const [cryptoLogs, setCryptoLogs] = useState<string[]>([
+    "[SYSTEM] Zero-Trust Environment Initialized",
+    "[CRYPTO] WebCrypto API ready for local hashing"
+  ]);
+  
+  const [isDemoDrawerOpen, setIsDemoDrawerOpen] = useState(false);
 
   const triggerSignal = () => {
+    if (!activeSignal) {
+      setCryptoLogs(prev => [...prev.slice(-4), `[${new Date().toISOString().split('T')[1].slice(0,12)}] Hashing telemetry via SHA-256...`]);
+    }
     setActiveSignal(true);
     if (signalTimeoutRef.current) clearTimeout(signalTimeoutRef.current);
     signalTimeoutRef.current = window.setTimeout(() => setActiveSignal(false), 300);
@@ -89,6 +98,7 @@ function LoginPage() {
   // ── Authentication & Adaptive Trust Evaluation ────────────────
   const evaluateTrust = async (accessToken: string) => {
     // Animate progress steps
+    setCryptoLogs(prev => [...prev.slice(-4), `[SYSTEM] Generating zero-knowledge payload...`]);
     setTimeout(() => setStep(1), 400);
     setTimeout(() => setStep(2), 900);
 
@@ -351,17 +361,47 @@ function LoginPage() {
                 </div>
 
                 {/* Visual Biometrics Indicator */}
-                <div className="flex items-center justify-between text-xs px-3 py-2.5 bg-[var(--color-navy)]/60 border border-[var(--color-navy-border)] rounded-lg mt-2 shadow-inner">
-                  <span className={`flex items-center gap-2 transition-colors duration-300 font-medium tracking-wide ${activeSignal ? 'text-[var(--color-bob-orange)]' : 'text-[var(--color-text-muted)]'}`}>
-                    <svg className={`w-4 h-4 transition-transform duration-300 ${activeSignal ? 'scale-110' : 'scale-100'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                    Behavioral Analysis Active
-                  </span>
-                  <div className="flex items-center gap-1 h-4">
-                    <div className={`w-1 bg-[var(--color-bob-orange)] rounded-full transition-all duration-150 ${activeSignal ? 'h-3 animate-pulse opacity-100' : 'h-1.5 opacity-30'}`}></div>
-                    <div className={`w-1 bg-[var(--color-bob-orange)] rounded-full transition-all duration-150 delay-75 ${activeSignal ? 'h-4 animate-pulse opacity-100' : 'h-1 opacity-30'}`}></div>
-                    <div className={`w-1 bg-[var(--color-bob-orange)] rounded-full transition-all duration-150 delay-150 ${activeSignal ? 'h-2 animate-pulse opacity-100' : 'h-1.5 opacity-30'}`}></div>
+                <div className="flex flex-col gap-3 mt-3">
+                  <div className={`flex items-center justify-between text-xs px-4 py-3 rounded-xl border backdrop-blur-md transition-all duration-300 ${activeSignal ? 'bg-[var(--color-bob-orange)]/10 border-[var(--color-bob-orange)]/30 shadow-[0_0_20px_rgba(242,101,34,0.15)]' : 'bg-black/30 border-white/5 shadow-inner'}`}>
+                    <span className={`flex items-center gap-2.5 transition-colors duration-300 font-bold tracking-wider uppercase text-[10px] ${activeSignal ? 'text-[var(--color-bob-orange)] drop-shadow-[0_0_8px_rgba(242,101,34,0.6)]' : 'text-[var(--color-text-muted)]'}`}>
+                      <svg className={`w-4 h-4 transition-transform duration-300 ${activeSignal ? 'scale-110 animate-pulse' : 'scale-100 opacity-50'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                      Behavioral Analysis Active
+                    </span>
+                    <div className="flex items-center gap-1.5 h-4">
+                      <div className={`w-1.5 rounded-full transition-all duration-150 ${activeSignal ? 'bg-[var(--color-bob-orange)] h-3 shadow-[0_0_8px_rgba(242,101,34,0.8)]' : 'bg-white/20 h-1.5'}`}></div>
+                      <div className={`w-1.5 rounded-full transition-all duration-150 delay-75 ${activeSignal ? 'bg-[var(--color-bob-orange)] h-4 shadow-[0_0_8px_rgba(242,101,34,0.8)]' : 'bg-white/20 h-1'}`}></div>
+                      <div className={`w-1.5 rounded-full transition-all duration-150 delay-150 ${activeSignal ? 'bg-[var(--color-bob-orange)] h-2.5 shadow-[0_0_8px_rgba(242,101,34,0.8)]' : 'bg-white/20 h-1.5'}`}></div>
+                    </div>
+                  </div>
+                  
+                  {/* Security Terminal Logs */}
+                  <div className="relative rounded-xl p-[1px] bg-gradient-to-b from-white/10 to-transparent overflow-hidden group">
+                    <div className="bg-[#05090f] rounded-[11px] p-3 shadow-[inset_0_4px_20px_rgba(0,0,0,0.5)] h-[96px] overflow-hidden flex flex-col justify-end relative">
+                      
+                      {/* Grid background inside terminal */}
+                      <div className="absolute inset-0 bg-[linear-gradient(to_right,#4285F410_1px,transparent_1px),linear-gradient(to_bottom,#4285F410_1px,transparent_1px)] bg-[size:10px_10px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,#000_100%,transparent_100%)] pointer-events-none"></div>
+
+                      <div className="relative z-10 flex flex-col justify-end h-full">
+                        {cryptoLogs.map((log, i) => {
+                          const isNew = i === cryptoLogs.length - 1;
+                          return (
+                            <div key={i} className={`font-mono text-[10.5px] leading-[1.4] flex items-start gap-2 ${isNew ? 'animate-fade-in text-[#60A5FA] drop-shadow-[0_0_6px_rgba(96,165,250,0.6)] font-semibold' : 'text-[#60A5FA]/50'}`}>
+                              <span className={`${isNew ? 'text-[#34A853] drop-shadow-[0_0_6px_rgba(52,168,83,0.9)] animate-pulse' : 'text-[#34A853]/40'} shrink-0 translate-y-[2px]`}>
+                                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
+                              </span> 
+                              <span className="tracking-wide break-all">{log}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Blinking block cursor */}
+                      {activeSignal && (
+                        <div className="absolute bottom-[10px] right-[10px] w-2 h-3 bg-[#60A5FA] animate-pulse drop-shadow-[0_0_8px_rgba(96,165,250,0.8)]"></div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -383,6 +423,72 @@ function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Demo Tools Button */}
+      <div className="fixed bottom-6 right-6 z-50">
+        <button 
+          onClick={() => setIsDemoDrawerOpen(true)}
+          className="bg-[#0a111a] border border-[var(--color-bob-orange)]/50 text-white p-3 rounded-full shadow-lg hover:shadow-[0_0_15px_rgba(242,101,34,0.5)] transition-all flex items-center justify-center group"
+          title="Demo Accounts"
+        >
+          <svg className="w-5 h-5 text-[var(--color-bob-orange)] group-hover:scale-110 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Demo Drawer Overlay */}
+      {isDemoDrawerOpen && (
+        <div className="fixed inset-0 z-[60] flex justify-end">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsDemoDrawerOpen(false)}></div>
+          <div className="relative w-80 bg-[var(--color-navy)] border-l border-white/10 h-full shadow-2xl animate-fade-in flex flex-col">
+            <div className="p-6 border-b border-white/10 flex justify-between items-center bg-[#0a111a]">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[var(--color-bob-orange)] animate-pulse"></span>
+                Demo Accounts
+              </h3>
+              <button onClick={() => setIsDemoDrawerOpen(false)} className="text-white/50 hover:text-white transition-colors">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-4 flex-1 overflow-y-auto space-y-3">
+              {[
+                { name: "Rahul Sharma", email: "rahul.sharma@email.com", role: "Customer", type: "Checking" },
+                { name: "Priya Mehta", email: "priya.mehta@email.com", role: "Customer", type: "Savings" },
+                { name: "Arvind Kapoor", email: "arvind.kapoor@email.com", role: "Customer", type: "Checking" },
+                { name: "Sneha Iyer", email: "sneha.iyer@email.com", role: "Customer", type: "Checking" },
+                { name: "Mohammed Raza", email: "mohammed.raza@email.com", role: "Customer", type: "Savings" },
+                { name: "System Analyst", email: "analyst@trustsphere.com", role: "Analyst", pwd: "Analyst@123", type: "Admin" }
+              ].map(user => (
+                <button
+                  key={user.email}
+                  onClick={() => {
+                    setEmail(user.email);
+                    setPwd(user.pwd || "Password@123");
+                    setIsDemoDrawerOpen(false);
+                  }}
+                  className="w-full text-left p-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-[var(--color-bob-orange)]/50 transition-all group flex flex-col"
+                >
+                  <div className="flex justify-between items-start mb-1 w-full">
+                    <span className="font-semibold text-white text-sm">{user.name}</span>
+                    <span className={`text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full ${user.role === 'Analyst' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'}`}>
+                      {user.role}
+                    </span>
+                  </div>
+                  <div className="text-xs text-white/50 mb-2">{user.email}</div>
+                  <div className="text-[10px] text-white/40 flex items-center gap-1 mt-auto pt-2">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                    {user.type} Account
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="p-4 border-t border-white/10 text-xs text-white/40 text-center bg-[#0a111a]">
+              Select an account to autofill credentials.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
