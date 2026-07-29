@@ -132,7 +132,7 @@ export function DashHeader({ title, subtitle, actions }: { title: string; subtit
   );
 }
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== "undefined") {
       return document.documentElement.classList.contains("dark") || 

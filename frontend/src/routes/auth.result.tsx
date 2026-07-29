@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { apiFetch } from "@/lib/api";
 import { TrustRing } from "@/components/TrustRing";
 import { BobLogo } from "@/components/BobLogo";
@@ -28,6 +28,115 @@ interface TrustResult {
   is_known_device: boolean;
   location: { country: string; city: string; ip: string };
   timestamp: string;
+  demo_otp?: string;
+}
+
+function OtpInputBox({
+  value,
+  onChange,
+  onComplete,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  onComplete?: (val: string) => void;
+}) {
+  const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Focus the first empty slot or slot 0 on mount
+  useEffect(() => {
+    const focusIdx = Math.min(value.length, 5);
+    inputsRef.current[focusIdx]?.focus();
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, i: number) => {
+    const rawVal = e.target.value.replace(/\D/g, "");
+
+    // Handle paste or multiple digits typed at once
+    if (rawVal.length > 1) {
+      const digits = rawVal.slice(0, 6);
+      onChange(digits);
+      const nextIdx = Math.min(digits.length, 5);
+      inputsRef.current[nextIdx]?.focus();
+      if (digits.length === 6 && onComplete) {
+        onComplete(digits);
+      }
+      return;
+    }
+
+    const singleDigit = rawVal.slice(-1);
+    const currentDigits = value.padEnd(6, " ").split("");
+    currentDigits[i] = singleDigit || " ";
+    const updated = currentDigits.join("").trimEnd();
+    onChange(updated);
+
+    if (singleDigit && i < 5) {
+      inputsRef.current[i + 1]?.focus();
+    }
+
+    if (updated.length === 6 && onComplete) {
+      onComplete(updated);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, i: number) => {
+    if (e.key === "Backspace") {
+      e.preventDefault();
+      const currentDigits = value.padEnd(6, " ").split("");
+      if (currentDigits[i] && currentDigits[i] !== " ") {
+        currentDigits[i] = " ";
+        const updated = currentDigits.join("").trimEnd();
+        onChange(updated);
+      } else if (i > 0) {
+        currentDigits[i - 1] = " ";
+        const updated = currentDigits.join("").trimEnd();
+        onChange(updated);
+        inputsRef.current[i - 1]?.focus();
+      }
+    } else if (e.key === "ArrowLeft" && i > 0) {
+      e.preventDefault();
+      inputsRef.current[i - 1]?.focus();
+    } else if (e.key === "ArrowRight" && i < 5) {
+      e.preventDefault();
+      inputsRef.current[i + 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (pasted) {
+      onChange(pasted);
+      const nextIdx = Math.min(pasted.length, 5);
+      inputsRef.current[nextIdx]?.focus();
+      if (pasted.length === 6 && onComplete) {
+        onComplete(pasted);
+      }
+    }
+  };
+
+  return (
+    <div className="flex gap-3 justify-center mb-6">
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <input
+          key={i}
+          ref={(el) => {
+            inputsRef.current[i] = el;
+          }}
+          id={`otp-input-${i}`}
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoComplete="one-time-code"
+          maxLength={1}
+          value={value[i] && value[i] !== " " ? value[i] : ""}
+          onChange={(e) => handleInputChange(e, i)}
+          onKeyDown={(e) => handleKeyDown(e, i)}
+          onPaste={handlePaste}
+          className="w-12 h-14 text-center font-mono text-2xl bg-[#0a111a] border border-white/10 rounded-xl focus:border-[var(--color-warning)] focus:ring-2 focus:ring-[var(--color-warning)]/20 focus:outline-none transition-all text-white shadow-inner"
+        />
+      ))}
+    </div>
+  );
 }
 
 function ResultPage() {
@@ -85,13 +194,14 @@ function ResultPage() {
     d.auth_action === "OTP"   ? { cls: "bg-[rgba(245,166,35,0.1)] border-[var(--color-warning)]/40 text-[var(--color-warning)]", icon: "!", text: "OTP required — Unusual activity detected" } :
                                 { cls: "bg-[rgba(232,56,79,0.1)] border-[var(--color-danger)]/40 text-[var(--color-danger)]", icon: "✕", text: "Access blocked — High-risk signals detected" };
 
-  const handleOtpSubmit = async () => {
-    if (otp.length !== 6) return;
+  const handleOtpSubmit = async (codeToVerify?: string) => {
+    const code = codeToVerify || otp;
+    if (code.length !== 6) return;
     try {
       const resp = await apiFetch(`${API_BASE}/api/auth/verify-otp`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: d.session_id, otp_code: otp }),
+        body: JSON.stringify({ session_id: d.session_id, otp_code: code }),
       });
       const data = await resp.json();
       setOtpStatus(data);
@@ -168,19 +278,22 @@ function ResultPage() {
             {d.auth_action === "OTP" && !otpStatus?.verified && (
               <div className="mt-6 bg-black/40 border border-[var(--color-warning)]/30 rounded-2xl p-8 relative z-10 shadow-[0_0_40px_rgba(245,166,35,0.05)]">
                 <div className="label-caps text-[var(--color-warning)] mb-5 text-center tracking-widest">Security Verification Required</div>
-                <div className="flex gap-3 justify-center mb-6">
-                  {[0,1,2,3,4,5].map(i => (
-                    <input key={i} maxLength={1} value={otp[i] || ""}
-                      onChange={e => setOtp(o => { const arr = o.split(""); arr[i] = e.target.value; return arr.join(""); })}
-                      className="w-12 h-14 text-center font-mono text-2xl bg-[#0a111a] border border-white/10 rounded-xl focus:border-[var(--color-warning)] focus:ring-2 focus:ring-[var(--color-warning)]/20 focus:outline-none transition-all text-white shadow-inner"/>
-                  ))}
-                </div>
-                <button onClick={handleOtpSubmit} className="w-full bg-gradient-to-r from-[var(--color-warning)] to-yellow-600 text-black font-extrabold py-4 rounded-xl shadow-[0_4px_20px_rgba(245,166,35,0.4)] hover:shadow-[0_6px_25px_rgba(245,166,35,0.6)] hover:-translate-y-1 transition-all disabled:opacity-50 disabled:hover:translate-y-0 text-sm tracking-wide" disabled={otp.length < 6}>
+                <OtpInputBox value={otp} onChange={setOtp} onComplete={(code) => handleOtpSubmit(code)} />
+                <button onClick={() => handleOtpSubmit()} className="w-full bg-gradient-to-r from-[var(--color-warning)] to-yellow-600 text-black font-extrabold py-4 rounded-xl shadow-[0_4px_20px_rgba(245,166,35,0.4)] hover:shadow-[0_6px_25px_rgba(245,166,35,0.6)] hover:-translate-y-1 transition-all disabled:opacity-50 disabled:hover:translate-y-0 text-sm tracking-wide" disabled={otp.length < 6}>
                   VERIFY OTP
                 </button>
-                <div className="text-[10px] text-white/30 mt-5 text-center font-mono uppercase tracking-[0.2em]">
-                  Check backend console for code (demo)
-                </div>
+                {d.demo_otp ? (
+                  <div className="text-[12px] text-[var(--color-warning)] mt-5 text-center font-mono font-bold uppercase tracking-widest bg-[var(--color-warning)]/10 py-2.5 rounded-lg border border-[var(--color-warning)]/20 shadow-sm">
+                    Demo Mode OTP: {d.demo_otp}
+                  </div>
+                ) : (
+                  <div className="text-[12px] text-[var(--color-warning)]/90 mt-5 text-center font-mono uppercase tracking-widest bg-white/5 py-2.5 px-4 rounded-lg border border-white/10 flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 text-[var(--color-warning)] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 002-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span>OTP sent to your registered email address</span>
+                  </div>
+                )}
               </div>
             )}
 

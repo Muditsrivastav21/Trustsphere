@@ -194,14 +194,18 @@ async def login(request: Request, req: LoginRequest, background_tasks: Backgroun
             logger.warning(f"Failed to create audit log: {e}")
 
     # 13. Generate OTP if needed
+    user_email = (user.get("email") or auth_email or "").strip().lower()
+    is_real_gmail = bool(user_email and user_email.endswith("@gmail.com"))
+
+    generated_otp_code = None
     if score_result["auth_action"] == "OTP":
         try:
-            otp_code = generate_otp()
-            store_otp(session_id, otp_code)
+            generated_otp_code = generate_otp()
+            store_otp(session_id, generated_otp_code)
             logger.info(f"OTP generated for session {session_id}")
             # Send the OTP via Email asynchronously!
-            if user.get("email"):
-                background_tasks.add_task(send_email_otp, user["email"], otp_code)
+            if user_email:
+                background_tasks.add_task(send_email_otp, user_email, generated_otp_code)
         except Exception as e:
             logger.warning(f"Failed to generate/send OTP: {e}")
 
@@ -217,10 +221,15 @@ async def login(request: Request, req: LoginRequest, background_tasks: Backgroun
             is_flagged=any(f.startswith("FLAGGED_IP") for f in all_flags),
             is_fraud_flagged=is_fraud_flagged,
             city=user.get("city") or "",
-            email=user.get("email") or "",
+            email=user_email,
         )
     except Exception as e:
         logger.warning(f"Neo4j graph write task scheduling failed: {e}")
+
+    # Only return OTP to client for demo accounts (not real gmail ones)
+    demo_otp_response = None
+    if generated_otp_code and not is_real_gmail:
+        demo_otp_response = generated_otp_code
 
     # 15. Return response
     return LoginResponse(
@@ -247,6 +256,7 @@ async def login(request: Request, req: LoginRequest, background_tasks: Backgroun
             ip=req.ip_address,
         ),
         timestamp=timestamp_str,
+        demo_otp=demo_otp_response,
     )
 
 

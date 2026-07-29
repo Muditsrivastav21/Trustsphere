@@ -23,53 +23,47 @@ def setup_real_users():
         email = u["email"]
         name = u["name"]
         
-        print(f"Checking if user {email} exists...")
+        print(f"Checking if user {email} exists in Auth...")
         try:
+            # Check if user exists in Auth
+            users_res = sb.auth.admin.list_users()
+            auth_user = next((x for x in users_res if x.email == email), None)
+            
+            if not auth_user:
+                print(f"User {email} missing from Auth. Creating...")
+                attributes = {
+                    "email": email,
+                    "password": password,
+                    "email_confirm": True,
+                    "user_metadata": {"full_name": name}
+                }
+                auth_res = sb.auth.admin.create_user(attributes)
+                auth_id = auth_res.user.id
+                print(f"Created in Auth: ID {auth_id}")
+            else:
+                auth_id = auth_user.id
+                print(f"User already in Auth: ID {auth_id}")
+            
+            # Now ensure public.users is synced
             user_res = sb.table("users").select("id, role").eq("email", email).execute()
             if user_res.data:
-                print(f"User already exists in public.users: {user_res.data[0]}. Updating details...")
+                print(f"User exists in public.users. Updating details...")
                 sb.table("users").update({
                     "customer_id": u["customer_id"],
                     "name": name,
                     "account_type": u["account_type"],
                     "role": "customer"
                 }).eq("email", email).execute()
-                print("Updated existing user record.")
-                continue
-
-            print(f"Creating user {name} via Supabase Auth Admin API...")
-            attributes = {
-                "email": email,
-                "password": password,
-                "email_confirm": True,
-                "user_metadata": {"full_name": name}
-            }
-            auth_res = sb.auth.admin.create_user(attributes)
-            print(f"User created successfully in Auth: ID {auth_res.user.id}")
-            
-            time.sleep(2)
-            
-            user_check = sb.table("users").select("id, role").eq("email", email).execute()
-            if not user_check.data:
-                print("Warning: User was not inserted into public.users. Creating entry manually...")
+            else:
+                print("Inserting into public.users...")
                 sb.table("users").insert({
-                    "auth_id": auth_res.user.id,
+                    "auth_id": auth_id,
                     "customer_id": u["customer_id"],
                     "name": name,
                     "email": email,
                     "account_type": u["account_type"],
                     "role": "customer"
                 }).execute()
-                print("Inserted user record manually.")
-            else:
-                # Update with customer details if trigger only set basic info
-                sb.table("users").update({
-                    "customer_id": u["customer_id"],
-                    "name": name,
-                    "account_type": u["account_type"],
-                    "role": "customer"
-                }).eq("email", email).execute()
-                print("Updated user record with full details.")
                 
         except Exception as e:
             print(f"Error creating user {email}: {e}")

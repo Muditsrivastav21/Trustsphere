@@ -201,13 +201,13 @@ function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-[var(--color-navy)]" onMouseMove={onMouseMove}>
-      <div className="hidden md:flex w-3/5 relative overflow-hidden bg-[#0a111a] border-r border-white/5 flex-col justify-center items-center">
+    <div className="min-h-screen flex bg-[var(--color-page-bg)] transition-colors duration-500" onMouseMove={onMouseMove}>
+      <div className="hidden md:flex w-3/5 relative overflow-hidden bg-[var(--color-page-bg)] border-r border-[var(--color-glass-border)] flex-col justify-center items-center transition-colors duration-500">
         {/* Deep ambient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-[#0a111a] via-[var(--color-navy)] to-[#070b12]"></div>
+        <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-page-bg)] via-[var(--color-page-bg)] to-[var(--color-panel-bg)]"></div>
         
         {/* Animated grid overlay */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)]"></div>
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--color-glass-border)_1px,transparent_1px),linear-gradient(to_bottom,var(--color-glass-border)_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-30"></div>
         
         {/* Massive glowing orbs */}
         <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-[var(--color-bob-orange)]/10 rounded-full blur-[120px] pointer-events-none"></div>
@@ -220,8 +220,8 @@ function LoginPage() {
 
         <div className="absolute top-10 left-10 z-20 flex items-center gap-4">
           <BobLogo size={36} />
-          <div className="h-6 w-px bg-white/20"></div>
-          <span className="text-white/60 text-xs tracking-[0.2em] font-bold uppercase">Identity Trust Platform</span>
+          <div className="h-6 w-px bg-[var(--color-glass-border)]"></div>
+          <span className="text-[var(--color-text-sub)] text-xs tracking-[0.2em] font-bold uppercase">Identity Trust Platform</span>
         </div>
 
         <div className="relative z-10 w-full max-w-xl mx-auto px-12 flex flex-col items-center">
@@ -245,7 +245,7 @@ function LoginPage() {
                 <defs>
                   <linearGradient id="shield-grad" x1="0" y1="0" x2="140" y2="160" gradientUnits="userSpaceOnUse">
                     <stop offset="0%" stopColor="rgba(242,101,34,0.15)" />
-                    <stop offset="100%" stopColor="rgba(13,27,42,0.8)" />
+                    <stop offset="100%" stopColor="var(--color-page-bg)" />
                   </linearGradient>
                   <linearGradient id="shield-border-grad" x1="0" y1="0" x2="140" y2="160" gradientUnits="userSpaceOnUse">
                     <stop offset="0%" stopColor="#F26522" />
@@ -257,21 +257,21 @@ function LoginPage() {
             </div>
             
             {/* Floating Glass Badges */}
-            <div className="absolute -left-16 top-10 bg-[#0a111a]/80 backdrop-blur-md border border-white/10 rounded-full px-4 py-1.5 text-xs text-white font-mono shadow-[0_4px_20px_rgba(0,0,0,0.5)] animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
+            <div className="absolute -left-16 top-10 bg-[var(--color-panel-bg)] backdrop-blur-md border border-[var(--color-glass-border)] rounded-full px-4 py-1.5 text-xs text-[var(--color-text-main)] font-mono shadow-[0_4px_20px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
               <span className="text-[var(--color-success)] mr-2">●</span> 99.9% Accuracy
             </div>
-            <div className="absolute -right-14 bottom-16 bg-[#0a111a]/80 backdrop-blur-md border border-white/10 rounded-full px-4 py-1.5 text-xs text-white font-mono shadow-[0_4px_20px_rgba(0,0,0,0.5)] animate-fade-in-up" style={{ animationDelay: '0.8s' }}>
+            <div className="absolute -right-14 bottom-16 bg-[var(--color-panel-bg)] backdrop-blur-md border border-[var(--color-glass-border)] rounded-full px-4 py-1.5 text-xs text-[var(--color-text-main)] font-mono shadow-[0_4px_20px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] animate-fade-in-up" style={{ animationDelay: '0.8s' }}>
               <span className="text-blue-400 mr-2">●</span> Zero Trust
             </div>
-            <div className="absolute -left-8 -bottom-2 bg-[#0a111a]/80 backdrop-blur-md border border-white/10 rounded-full px-4 py-1.5 text-xs text-white font-mono shadow-[0_4px_20px_rgba(0,0,0,0.5)] animate-fade-in-up" style={{ animationDelay: '1.1s' }}>
+            <div className="absolute -left-8 -bottom-2 bg-[var(--color-panel-bg)] backdrop-blur-md border border-[var(--color-glass-border)] rounded-full px-4 py-1.5 text-xs text-[var(--color-text-main)] font-mono shadow-[0_4px_20px_rgba(0,0,0,0.1)] dark:shadow-[0_4px_20px_rgba(0,0,0,0.5)] animate-fade-in-up" style={{ animationDelay: '1.1s' }}>
               <span className="text-purple-400 mr-2">●</span> Real-time AI
             </div>
           </div>
 
-          <h2 className="text-4xl lg:text-5xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-b from-white to-white/70 text-center leading-[1.15]">
+          <h2 className="text-4xl lg:text-5xl font-extrabold tracking-tight text-[var(--color-text-main)] text-center leading-[1.15]">
             Security that <span className="text-transparent bg-clip-text bg-gradient-to-r from-[var(--color-bob-orange)] to-yellow-500">adapts</span><br/>to your behavior.
           </h2>
-          <p className="mt-6 text-lg text-white/50 max-w-md mx-auto text-center leading-relaxed">
+          <p className="mt-6 text-lg text-[var(--color-text-sub)] max-w-md mx-auto text-center leading-relaxed">
             Every signal like device, behavior, network, and location is scored continuously in the background.
           </p>
           
@@ -285,7 +285,7 @@ function LoginPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center px-6 py-12 bg-gradient-to-br from-[var(--color-navy-mid)] to-[var(--color-navy)] relative overflow-hidden">
+      <div className="flex-1 flex items-center justify-center px-6 py-12 bg-[var(--color-page-bg)] relative overflow-hidden transition-colors duration-500">
         {/* Subtle background glow elements */}
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-[var(--color-bob-orange)]/5 rounded-full blur-[100px] pointer-events-none"></div>
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-blue-500/5 rounded-full blur-[100px] pointer-events-none"></div>
@@ -293,29 +293,29 @@ function LoginPage() {
         <div className="w-full max-w-md animate-fade-in-up relative z-10">
           <div className="md:hidden mb-8"><BobLogo /></div>
           
-          <div className="bg-[var(--color-navy)]/60 backdrop-blur-xl border border-white/5 shadow-2xl rounded-2xl p-8 sm:p-10">
+          <div className="bg-[var(--color-panel-bg)] backdrop-blur-xl border border-[var(--color-glass-border)] shadow-2xl rounded-2xl p-8 sm:p-10 transition-colors duration-500">
             <div className="mb-8">
               <div className="flex items-center gap-2 mb-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-bob-orange)] animate-pulse"></span>
                 <div className="label-caps text-[var(--color-bob-orange)] tracking-widest">Customer Portal</div>
               </div>
-              <h1 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-[var(--color-text-secondary)]">
+              <h1 className="text-3xl font-extrabold tracking-tight text-[var(--color-text-main)]">
                 {isRegistering ? "Create Account" : "Welcome back"}
               </h1>
-              <p className="text-sm text-[var(--color-text-secondary)] mt-2 leading-relaxed">
+              <p className="text-sm text-[var(--color-text-sub)] mt-2 leading-relaxed">
                 {isRegistering ? "Register to securely access your digital banking." : "Sign in securely to continue to your account."}
               </p>
             </div>
 
             {!loading && (
               <div className="animate-fade-in mb-6">
-                <button onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-3 px-4 py-3.5 bg-white text-black font-semibold rounded-xl text-sm hover:bg-gray-100 hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(255,255,255,0.15)] transition-all duration-300 group border border-white/20">
+                <button onClick={handleGoogleLogin} className="w-full flex items-center justify-center gap-3 px-4 py-3.5 bg-white dark:bg-[#1a2332] text-black dark:text-white font-semibold rounded-xl text-sm hover:-translate-y-0.5 hover:shadow-[0_8px_20px_rgba(0,0,0,0.1)] transition-all duration-300 group border border-[var(--color-glass-border)]">
                   <svg className="w-5 h-5 transition-transform group-hover:scale-110 duration-300" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                   Continue with Google
                 </button>
                 <div className="relative my-8">
-                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[var(--color-navy-border)]"></div></div>
-                  <div className="relative flex justify-center text-xs"><span className="bg-[var(--color-navy)] px-4 py-1.5 rounded-full border border-[var(--color-navy-border)] text-[var(--color-text-muted)] tracking-wider uppercase shadow-sm">Or continue with email</span></div>
+                  <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[var(--color-glass-border)]"></div></div>
+                  <div className="relative flex justify-center text-xs"><span className="bg-[var(--color-page-bg)] px-4 py-1.5 rounded-full border border-[var(--color-glass-border)] text-[var(--color-text-dim)] tracking-wider uppercase shadow-sm">Or continue with email</span></div>
                 </div>
               </div>
             )}

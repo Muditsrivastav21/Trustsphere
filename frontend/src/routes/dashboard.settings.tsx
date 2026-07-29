@@ -27,7 +27,10 @@ function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [toggles, setToggles] = useState({ blockEmail: true, otpSms: true, highRiskWebhook: false, dailyReport: true });
-  const [customerToggles, setCustomerToggles] = useState({ reqOtpOutsideInd: false, pushNightLogin: false, lockUnrecognized: true });
+  const [customerToggles, setCustomerToggles] = useState(() => {
+    const saved = localStorage.getItem("trustsphere_customer_rules");
+    return saved ? JSON.parse(saved) : { reqOtpOutsideInd: false, pushNightLogin: false, lockUnrecognized: true };
+  });
   const [auditEntries, setAuditEntries] = useState<any[]>([]);
   const [devices, setDevices] = useState<any[]>([]);
 
@@ -59,6 +62,11 @@ function SettingsPage() {
         .catch(() => {});
     }
   }, [tab, isCustomer]);
+
+  // Sync customer rules to local storage for the demo
+  useEffect(() => {
+    localStorage.setItem("trustsphere_customer_rules", JSON.stringify(customerToggles));
+  }, [customerToggles]);
 
   const revokeDevice = async (id: string) => {
     try {

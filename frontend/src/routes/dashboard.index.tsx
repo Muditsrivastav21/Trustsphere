@@ -200,7 +200,7 @@ function Overview() {
 
   const flagged = feed.filter(f => f.action !== "ALLOW").slice(0, 6);
 
-  const totalDisplay = stats ? stats.total_logins_today.toLocaleString() : "—";
+  const totalDisplay = stats && stats.total_logins_today !== undefined ? stats.total_logins_today.toLocaleString() : "—";
   const highRiskDisplay = stats ? stats.high_risk_count.toString() : "—";
   const blockedDisplay = stats ? stats.blocked_count.toString() : "—";
   const fraudRingsDisplay = stats ? stats.fraud_rings_detected.toString() : "—";

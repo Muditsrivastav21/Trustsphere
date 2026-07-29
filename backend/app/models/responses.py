@@ -40,6 +40,7 @@ class LoginResponse(BaseModel):
     is_known_device: bool
     location: LocationInfo
     timestamp: str
+    demo_otp: Optional[str] = None
 
 
 class ContinuousAuthResponse(BaseModel):

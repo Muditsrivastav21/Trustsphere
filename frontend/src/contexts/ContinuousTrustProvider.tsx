@@ -29,18 +29,23 @@ export function ContinuousTrustProvider({ children }: { children: React.ReactNod
         
         if (dt > 0) {
           const speed = Math.sqrt(dx*dx + dy*dy) / dt;
-          // Erratic mouse speed (e.g. wild shaking)
-          if (speed > 5) {
-            penaltyPoints.current += 2;
+          // Extremely erratic mouse speed (scaled up to prevent false positives for normal users)
+          if (speed > 18) {
+            penaltyPoints.current += 1;
           }
         }
       }
       lastMousePos.current = { x: e.clientX, y: e.clientY, t: now };
     };
 
+    let lastKeyTime = 0;
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Rapid random keystrokes
-      penaltyPoints.current += 0.5;
+      const now = Date.now();
+      // Only penalize non-human rapid keystrokes (e.g. bot scripts typing < 30ms apart)
+      if (lastKeyTime && now - lastKeyTime < 30) {
+        penaltyPoints.current += 1;
+      }
+      lastKeyTime = now;
     };
 
     window.addEventListener("mousemove", handleMouseMove);
