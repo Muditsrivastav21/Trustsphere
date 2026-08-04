@@ -9,7 +9,7 @@ export const Route = createFileRoute("/dashboard/graph")({
   component: GraphPage,
 });
 
-const API_BASE = "http://localhost:8001";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
 
 type NodeType = "user" | "device" | "ip" | "fraud";
 type Node = { id: string; type: NodeType; label: string; fraud?: boolean; connections: number; val?: number; color?: string };
@@ -39,11 +39,21 @@ function GraphPage() {
   const fgRef = useRef<any>();
   const [isSimulating, setIsSimulating] = useState(false);
 
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
   const loadData = async (currentFilter: "all" | "fraud") => {
     setLoading(true);
+    setFetchError(null);
     try {
       const filterParam = currentFilter === "fraud" ? "fraud_only" : "all";
-      const r = await apiFetch(`${API_BASE}/api/graph/nodes?filter=${filterParam}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      
+      const r = await apiFetch(`${API_BASE}/api/graph/nodes?filter=${filterParam}`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
       const data = await r.json();
       
       const apiNodes = data.nodes || [];
@@ -78,7 +88,12 @@ function GraphPage() {
       }
 
       setGraphData({ nodes, links });
-    } catch (e) {
+    } catch (e: any) {
+      if (e.name === 'AbortError' || e.message?.includes('abort')) {
+        setFetchError("Connection timed out. Showing simulated topology.");
+      } else {
+        setFetchError("Connection failed. Showing simulated topology.");
+      }
       setGraphData(makeFallbackGraph());
     } finally {
       setLoading(false);
@@ -190,6 +205,13 @@ function GraphPage() {
               <div className="absolute inset-0 flex flex-col items-center justify-center z-10 bg-black/50 backdrop-blur-sm">
                 <div className="w-12 h-12 border-4 border-[var(--color-bob-orange)] border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(242,101,34,0.3)]"></div>
                 <div className="text-sm font-mono tracking-[0.2em] uppercase text-[var(--color-bob-orange)] font-bold mt-6">Analyzing Topology…</div>
+              </div>
+            )}
+            
+            {fetchError && !loading && (
+              <div className="absolute top-6 left-1/2 -translate-x-1/2 z-20 bg-[var(--color-warning)]/20 border border-[var(--color-warning)]/40 text-[var(--color-warning)] px-6 py-3 rounded-full backdrop-blur-md shadow-[0_0_20px_rgba(245,166,35,0.2)] font-mono text-xs font-bold tracking-widest uppercase flex items-center gap-3 animate-fade-in-up">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                {fetchError}
               </div>
             )}
             

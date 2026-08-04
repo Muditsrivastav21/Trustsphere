@@ -146,4 +146,10 @@ npm run dev
 ---
 
 ## Security & Privacy
-TrustSphere AI processes sensitive behavioral and device data. All network calls are secured, and passwords/OTPs are transmitted securely. **No personal keystroke data (the actual characters typed) is stored**—only the timing metadata and flight times are processed to protect user privacy.
+TrustSphere AI processes sensitive behavioral and device data. All network calls are secured, and passwords/OTPs are transmitted securely. 
+
+- **Device Fingerprinting**: Only the cryptographically derived device hash is stored in the database. Raw canvas, WebGL, or audio fingerprint payloads are discarded. Device hashes are retained for up to 90 days of inactivity before purge (policy target).
+- **Network Telemetry**: We collect IPs to derive country, city, and ASN flags for risk scoring. Persistent IP-to-identity tracking is not maintained beyond session scope, matching the standard 30-day audit log retention.
+- **Behavioral Biometrics**: **No personal keystroke data (the actual characters typed) is stored**—only the timing metadata, flight times, and mouse-movement data are processed to protect user privacy. 
+
+While our current IsolationForest model runs on synthetic data for this demo, a production rollout will continuously retrain on consented, anonymized behavioral logs containing the exact same timing features.

@@ -152,7 +152,7 @@ def get_users_list(current_user: dict = Depends(get_current_user)):
         users_data = users_res.data or []
         
         # Fetch all login events to compute aggregates
-        events_res = sb.table("login_events").select("user_id, trust_score, device_hash").execute()
+        events_res = sb.table("login_events").select("user_id, trust_score, device_hash, flags, metadata, timestamp").execute()
         events_data = events_res.data or []
         
         # Group events by user_id
@@ -175,6 +175,16 @@ def get_users_list(current_user: dict = Depends(get_current_user)):
             if unique_devices == 0:
                 unique_devices = 1 # Default
                 
+            # Get latest flags & xai_explanations
+            latest_flags = []
+            xai_explanations = []
+            if sessions_count > 0:
+                sorted_evs = sorted(u_evs, key=lambda x: x.get("timestamp", ""), reverse=True)
+                latest_ev = sorted_evs[0]
+                latest_flags = latest_ev.get("flags") or []
+                metadata = latest_ev.get("metadata") or {}
+                xai_explanations = metadata.get("xai_explanations") or []
+                
             result.append({
                 "name": u["name"],
                 "id": u["customer_id"],
@@ -183,7 +193,9 @@ def get_users_list(current_user: dict = Depends(get_current_user)):
                 "sessions": sessions_count,
                 "devices": unique_devices,
                 "email": u.get("email") or "",
-                "role": u.get("role") or "customer"
+                "role": u.get("role") or "customer",
+                "latest_flags": latest_flags,
+                "xai_explanations": xai_explanations
             })
             
         return result
