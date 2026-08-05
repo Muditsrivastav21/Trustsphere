@@ -12,3 +12,5 @@ python-dotenv==1.0.1
 deepface==0.0.92
 mediapipe==0.10.14
 tf-keras==2.17.0
+easyocr==1.7.1
+rapidfuzz==3.9.3

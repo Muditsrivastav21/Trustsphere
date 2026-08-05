@@ -39,6 +39,7 @@ async def signup(request: Request, req: OnboardingRequest):
         device_signals=device_dict,
         behavior_signals=behavior_dict,
         reference_image=req.reference_image,
+        id_document_image=req.id_document_image,
     )
     
     attempt_id = str(uuid.uuid4())
@@ -59,6 +60,8 @@ async def signup(request: Request, req: OnboardingRequest):
             "decision": result["decision"],
             "reason_codes": result["reason_codes"],
             "graph_check_results": result.get("graph_risk", {}),
+            "id_document_extracted_fields": result.get("id_document_extracted_fields", {}),
+            "face_match_result": result.get("face_match_result", {}),
             "timestamp": timestamp
         }).execute()
     except Exception as e:

@@ -11,6 +11,8 @@ from app.database.supabase_client import get_supabase
 from app.utils.hashing import generate_fingerprint_hash, hash_string
 from app.utils.logger import logger
 from app.services.graph_service import check_onboarding_graph_risk
+from app.engines.document_engine import extract_document_fields, validate_id_format, cross_check_fields
+from app.engines.face_verification_engine import extract_face_embedding, compare_faces
 
 DISPOSABLE_DOMAINS = {"mailinator.com", "10minutemail.com", "tempmail.com", "guerrillamail.com", "sharklasers.com"}
 
@@ -42,6 +44,7 @@ def evaluate_onboarding_risk(
     device_signals: dict,
     behavior_signals: dict,
     reference_image: str | None = None,
+    id_document_image: str | None = None,
 ) -> dict:
     """
     Score the onboarding attempt from 0 (High Risk) to 100 (Trusted).
@@ -68,6 +71,39 @@ def evaluate_onboarding_risk(
     if "test" in name.lower() or "demo" in name.lower():
         score -= 30
         reason_codes.append("SUSPICIOUS_NAME_PATTERN")
+
+    # 1b. Document ID Format & OCR Validation
+    id_document_extracted_fields = None
+    if not id_document_image:
+        score -= 50
+        reason_codes.append("NO_ID_DOCUMENT")
+    else:
+        if not validate_id_format(id_number):
+            score -= 40
+            reason_codes.append("INVALID_ID_FORMAT")
+            
+        doc_fields = extract_document_fields(id_document_image)
+        id_document_extracted_fields = doc_fields
+        
+        if doc_fields.get("ocr_confidence", 0) < 0.3:
+            # Low confidence - route to manual review rather than hard reject if possible
+            score -= 30
+            reason_codes.append("LOW_OCR_CONFIDENCE")
+            
+        # Cross-check fields
+        if doc_fields.get("extracted_name"):
+            cross_check = cross_check_fields(
+                form_name=name,
+                form_dob=dob,
+                extracted_name=doc_fields["extracted_name"],
+                extracted_dob=doc_fields.get("extracted_dob", "")
+            )
+            if not cross_check["match"]:
+                score -= 60
+                reason_codes.append("DOCUMENT_FIELD_MISMATCH")
+            if not cross_check["dob_match"] and doc_fields.get("extracted_dob"):
+                score -= 40
+                reason_codes.append("DOCUMENT_DOB_MISMATCH")
 
     # 2. Velocity Abuse
     user_agent = device_signals.get("user_agent", "")
@@ -119,37 +155,30 @@ def evaluate_onboarding_risk(
         score -= 20
         reason_codes.append("NO_MOUSE_MOVEMENT")
 
-    # 4. Face Verification (Reference Photo)
+    # 4. Face Verification (Reference Photo & ID Document Match)
     embedding = None
+    face_match_result = None
+    
     if not reference_image:
         score -= 100
         reason_codes.append("NO_REFERENCE_IMAGE")
     else:
-        try:
-            from deepface import DeepFace
-            import numpy as np
-            import base64
-            import cv2
-            
-            b64_data = reference_image.split(",")[1] if "," in reference_image else reference_image
-            img_data = base64.b64decode(b64_data)
-            nparr = np.frombuffer(img_data, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            res = DeepFace.represent(img_path=img, model_name="Facenet512", enforce_detection=True)
-            if res and len(res) > 0:
-                embedding = res[0]["embedding"]
-            else:
-                score -= 100
-                reason_codes.append("NO_FACE_DETECTED")
-        except ValueError as e:
-            logger.warning(f"Face extraction failed (no face): {e}")
+        # Extract embedding for the selfie (to store in the database if accepted)
+        embedding = extract_face_embedding(reference_image)
+        if not embedding:
             score -= 100
             reason_codes.append("NO_FACE_DETECTED")
-        except Exception as e:
-            logger.warning(f"Face embedding error: {e}")
-            score -= 100
-            reason_codes.append("FACE_EXTRACTION_ERROR")
+            
+        # Compare selfie to ID document face
+        if id_document_image:
+            face_match = compare_faces(reference_image, id_document_image)
+            face_match_result = face_match
+            if face_match.get("error") == "NO_FACE_DETECTED":
+                score -= 50
+                reason_codes.append("NO_FACE_ON_ID")
+            elif not face_match.get("verified", False):
+                score -= 80
+                reason_codes.append("FACE_ID_MISMATCH")
 
     # Clamp score
     score = max(0, min(100, int(score)))
@@ -169,5 +198,7 @@ def evaluate_onboarding_risk(
         "device_hash": device_hash,
         "id_number_hash": id_number_hash,
         "embedding": embedding,
-        "graph_risk": graph_risk
+        "graph_risk": graph_risk,
+        "id_document_extracted_fields": id_document_extracted_fields,
+        "face_match_result": face_match_result
     }

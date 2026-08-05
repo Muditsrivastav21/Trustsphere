@@ -26,6 +26,7 @@ function SignupPage() {
 
   const webcamRef = useRef<Webcam>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [idDocumentImage, setIdDocumentImage] = useState<string | null>(null);
 
   const triggerSignal = () => {
     setActiveSignal(true);
@@ -80,6 +81,10 @@ function SignupPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!idDocumentImage) {
+      setError("Please upload an ID Document to proceed.");
+      return;
+    }
     if (!capturedImage) {
       setError("Please capture a reference selfie to proceed.");
       return;
@@ -128,6 +133,7 @@ function SignupPage() {
         total_keystrokes: keystrokeCountRef.current,
       },
       reference_image: capturedImage,
+      id_document_image: idDocumentImage,
     };
 
     try {
@@ -318,6 +324,42 @@ function SignupPage() {
                   <input type="password" required name="password" value={formData.password} onChange={handleChange} className="w-full px-4 py-3 bg-black/20 border border-white/5 rounded-xl text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-bob-orange)] focus:ring-1 focus:ring-[var(--color-bob-orange)]/50 transition-all text-white" />
                 </div>
                 
+                <div className="group col-span-2 mt-4">
+                  <label className="label-caps text-[var(--color-text-secondary)] block mb-1.5">ID Document (Passport / National ID)</label>
+                  {!idDocumentImage ? (
+                    <div className="w-full bg-black/40 rounded-xl border border-white/5 border-dashed p-6 text-center">
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        id="id-upload"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => setIdDocumentImage(reader.result as string);
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                      <label htmlFor="id-upload" className="cursor-pointer text-[var(--color-bob-orange)] hover:text-white transition font-medium text-sm">
+                        Click to upload your ID document
+                      </label>
+                      <div className="text-[10px] text-[var(--color-text-muted)] mt-2">Required for OCR verification.</div>
+                    </div>
+                  ) : (
+                    <div className="w-full bg-black/40 rounded-xl border border-white/5 p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-[var(--color-success)]/20 rounded-lg flex items-center justify-center border border-[var(--color-success)]/50">
+                           <svg className="w-5 h-5 text-[var(--color-success)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                        </div>
+                        <div className="text-sm text-white font-medium">Document Uploaded</div>
+                      </div>
+                      <button type="button" onClick={() => setIdDocumentImage(null)} className="text-xs text-[var(--color-danger)] hover:text-white transition">Remove</button>
+                    </div>
+                  )}
+                </div>
+
                 <div className="group col-span-2 mt-4">
                   <label className="label-caps text-[var(--color-text-secondary)] block mb-1.5">Reference Selfie</label>
                   {!capturedImage ? (
