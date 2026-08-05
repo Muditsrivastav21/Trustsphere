@@ -49,6 +49,7 @@ class OnboardingRequest(BaseModel):
     ip_address: str = "127.0.0.1"
     device: DeviceSignals = Field(default_factory=DeviceSignals)
     behavior: BehaviorSignals = Field(default_factory=BehaviorSignals)
+    reference_image: Optional[str] = None
 
 
 class VerifyOtpRequest(BaseModel):

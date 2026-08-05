@@ -11,12 +11,12 @@ export const Route = createFileRoute("/dashboard/graph")({
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
 
-type NodeType = "user" | "device" | "ip" | "fraud";
+type NodeType = "user" | "device" | "ip" | "fraud" | "applicant";
 type Node = { id: string; type: NodeType; label: string; fraud?: boolean; connections: number; val?: number; color?: string };
 type Edge = { source: string; target: string; relationship: string; fraud?: boolean; color?: string };
 
 const COLORS: Record<NodeType, string> = {
-  user: "#378ADD", device: "#F26522", ip: "#A855F7", fraud: "#E8384F",
+  user: "#378ADD", device: "#F26522", ip: "#A855F7", fraud: "#E8384F", applicant: "#10B981"
 };
 
 function mapNodeType(apiType: string): NodeType {
@@ -25,6 +25,7 @@ function mapNodeType(apiType: string): NodeType {
     case "DEVICE": return "device";
     case "IP": return "ip";
     case "FRAUD_RING": return "fraud";
+    case "APPLICANT": return "applicant";
     case "EMAIL": return "user";
     default: return "user";
   }
@@ -233,7 +234,7 @@ function GraphPage() {
             <div className="absolute bottom-6 right-6 bg-black/60 backdrop-blur-xl border border-white/10 p-5 rounded-2xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] text-xs">
               <div className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-4">Legend</div>
               <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-                {([["User","user"],["Device","device"],["IP Address","ip"],["Fraud Node","fraud"]] as const).map(([l, t]) => (
+                {([["User","user"],["Applicant","applicant"],["Device","device"],["IP Address","ip"],["Fraud Node","fraud"]] as const).map(([l, t]) => (
                   <div key={l} className="flex items-center gap-3">
                     <span className="w-3 h-3 rounded-full shadow-[0_0_8px_currentColor]" style={{ background: COLORS[t as NodeType], color: COLORS[t as NodeType] }}/>
                     <span className="text-white/80 font-medium tracking-wide">{l}</span>

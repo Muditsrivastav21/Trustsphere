@@ -133,6 +133,161 @@ def write_login_to_graph(
         logger.error(f"Neo4j write failed: {e}")
 
 
+def write_onboarding_to_graph(
+    applicant_id: str,
+    name: str,
+    email: str,
+    phone: str,
+    id_number_hash: str,
+    device_hash: str,
+    ip_address: str,
+    decision: str,
+    risk_score: int
+) -> None:
+    """
+    Write onboarding attempt to Neo4j.
+    Mirrors write_login_to_graph exactly but uses :Applicant instead of :User.
+    """
+    driver = get_neo4j_driver()
+
+    try:
+        with driver.session() as session:
+            # Merge Applicant node
+            session.run(
+                """
+                MERGE (a:Applicant {id: $applicant_id})
+                  ON CREATE SET a.name = $name, a.phone = $phone, a.id_number_hash = $id_number_hash,
+                                a.decision = $decision, a.risk_score = $risk_score, a.created_at = datetime()
+                """,
+                applicant_id=applicant_id,
+                name=name,
+                phone=phone,
+                id_number_hash=id_number_hash,
+                decision=decision,
+                risk_score=risk_score
+            )
+
+            # Merge Device node
+            if device_hash:
+                session.run(
+                    """
+                    MERGE (d:Device {hash: $hash})
+                      ON CREATE SET d.first_seen = datetime()
+                      ON MATCH  SET d.last_seen = datetime()
+                    """,
+                    hash=device_hash
+                )
+                # Link Applicant to Device
+                session.run(
+                    """
+                    MATCH (a:Applicant {id: $aid}), (d:Device {hash: $hash})
+                    MERGE (a)-[:USES]->(d)
+                    """,
+                    aid=applicant_id,
+                    hash=device_hash
+                )
+
+            # Merge IP node
+            if ip_address:
+                session.run(
+                    """
+                    MERGE (ip:IP {address: $address})
+                      ON CREATE SET ip.first_seen = datetime()
+                      ON MATCH  SET ip.last_seen = datetime()
+                    """,
+                    address=ip_address
+                )
+                # Link Applicant to IP
+                session.run(
+                    """
+                    MATCH (a:Applicant {id: $aid}), (ip:IP {address: $addr})
+                    MERGE (a)-[:LOGGED_FROM]->(ip)
+                    """,
+                    aid=applicant_id,
+                    addr=ip_address
+                )
+
+            # Email node
+            if email:
+                session.run(
+                    """
+                    MERGE (e:Email {address: $email})
+                    WITH e
+                    MATCH (a:Applicant {id: $aid})
+                    MERGE (a)-[:HAS_EMAIL]->(e)
+                    """,
+                    email=email,
+                    aid=applicant_id
+                )
+
+        logger.info(f"Graph updated for onboarding applicant {applicant_id}")
+
+    except Exception as e:
+        logger.error(f"Neo4j write_onboarding failed: {e}")
+
+
+def check_onboarding_graph_risk(
+    device_hash: str,
+    ip_address: str,
+    phone: str,
+    id_number_hash: str
+) -> dict:
+    """
+    Checks for overlapping onboarding attempts.
+    Finds cross-time device reuse and partial identity overlap.
+    """
+    driver = get_neo4j_driver()
+    results = {
+        "device_reuse_count": 0,
+        "ip_reuse_count": 0,
+        "duplicate_phone": False,
+        "duplicate_id_hash": False
+    }
+
+    try:
+        with driver.session() as session:
+            if device_hash:
+                res_dev = session.run(
+                    "MATCH (a:Applicant)-[:USES]->(d:Device {hash: $device_hash}) RETURN count(a) as cnt",
+                    device_hash=device_hash
+                )
+                rec = res_dev.single()
+                if rec:
+                    results["device_reuse_count"] = rec["cnt"]
+
+            if ip_address:
+                res_ip = session.run(
+                    "MATCH (a:Applicant)-[:LOGGED_FROM]->(ip:IP {address: $ip_address}) RETURN count(a) as cnt",
+                    ip_address=ip_address
+                )
+                rec = res_ip.single()
+                if rec:
+                    results["ip_reuse_count"] = rec["cnt"]
+
+            if phone:
+                res_phone = session.run(
+                    "MATCH (a:Applicant {phone: $phone}) RETURN count(a) as cnt",
+                    phone=phone
+                )
+                rec = res_phone.single()
+                if rec and rec["cnt"] > 0:
+                    results["duplicate_phone"] = True
+
+            if id_number_hash:
+                res_id = session.run(
+                    "MATCH (a:Applicant {id_number_hash: $id_number_hash}) RETURN count(a) as cnt",
+                    id_number_hash=id_number_hash
+                )
+                rec = res_id.single()
+                if rec and rec["cnt"] > 0:
+                    results["duplicate_id_hash"] = True
+
+    except Exception as e:
+        logger.error(f"Neo4j check_onboarding_graph_risk failed: {e}")
+
+    return results
+
+
 # In-memory mock database state
 _mock_nodes: list[dict] = []
 _mock_edges: list[dict] = []
@@ -425,12 +580,15 @@ def read_graph_nodes(filter_type: str = "all") -> dict:
                             "User": "USER", "Device": "DEVICE",
                             "IP": "IP", "Email": "EMAIL",
                             "FraudRing": "FRAUD_RING",
+                            "Applicant": "APPLICANT"
                         }
                         mapped_type = type_map.get(node_type, node_type)
 
                         props = dict(node)
                         if mapped_type == "USER":
                             label = props.get("name", props.get("customer_id", node_id))
+                        elif mapped_type == "APPLICANT":
+                            label = props.get("name", props.get("id", node_id))
                         elif mapped_type == "DEVICE":
                             ua = props.get("user_agent", "")
                             label = ua[:30] if ua else props.get("hash", node_id)[:12]

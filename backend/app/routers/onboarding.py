@@ -12,6 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from app.models.requests import OnboardingRequest
 from app.models.responses import OnboardingResponse, OnboardingListResponse, OnboardingAttemptRow
 from app.engines.onboarding_engine import evaluate_onboarding_risk
+from app.services.graph_service import write_onboarding_to_graph
 from app.utils.logger import logger
 from app.database.supabase_client import get_supabase
 from app.utils.rate_limiter import limiter
@@ -37,6 +38,7 @@ async def signup(request: Request, req: OnboardingRequest):
         ip_address=req.ip_address,
         device_signals=device_dict,
         behavior_signals=behavior_dict,
+        reference_image=req.reference_image,
     )
     
     attempt_id = str(uuid.uuid4())
@@ -56,11 +58,52 @@ async def signup(request: Request, req: OnboardingRequest):
             "risk_score": result["risk_score"],
             "decision": result["decision"],
             "reason_codes": result["reason_codes"],
+            "graph_check_results": result.get("graph_risk", {}),
             "timestamp": timestamp
         }).execute()
     except Exception as e:
         logger.error(f"Failed to record onboarding attempt: {e}")
         # We don't fail the request if just the DB insert fails
+        
+    # Write to Neo4j graph
+    write_onboarding_to_graph(
+        applicant_id=attempt_id,
+        name=req.name,
+        email=req.email,
+        phone=req.phone,
+        id_number_hash=result.get("id_number_hash", ""),
+        device_hash=result.get("device_hash", ""),
+        ip_address=req.ip_address,
+        decision=result["decision"],
+        risk_score=result["risk_score"]
+    )
+        
+    # 3. Store embedding if ALLOW
+    if result["decision"] == "ALLOW" and result.get("embedding"):
+        import random
+        import json
+        try:
+            # Check if user exists by email
+            user_res = sb.table("users").select("id").eq("email", req.email).execute()
+            
+            # Note: storing as JSON string to fit into jsonb safely via Supabase client
+            embedding_json = result["embedding"]
+            
+            if user_res.data and len(user_res.data) > 0:
+                sb.table("users").update({"face_embedding": embedding_json}).eq("email", req.email).execute()
+            else:
+                customer_id = f"CUST{random.randint(100000, 999999)}"
+                sb.table("users").insert({
+                    "email": req.email,
+                    "name": req.name,
+                    "customer_id": customer_id,
+                    "face_embedding": embedding_json,
+                    "account_type": "Savings",
+                    "risk_profile": "NORMAL",
+                    "role": "customer"
+                }).execute()
+        except Exception as e:
+            logger.error(f"Failed to save face embedding for {req.email}: {e}")
         
     return OnboardingResponse(
         id=attempt_id,

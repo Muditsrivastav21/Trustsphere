@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useRef, useCallback, useEffect } from "react";
+import Webcam from "react-webcam";
 import { BobLogo } from "@/components/BobLogo";
 
 export const Route = createFileRoute("/signup")({
@@ -22,6 +23,9 @@ function SignupPage() {
   
   const [activeSignal, setActiveSignal] = useState(false);
   const signalTimeoutRef = useRef<number | null>(null);
+
+  const webcamRef = useRef<Webcam>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
 
   const triggerSignal = () => {
     setActiveSignal(true);
@@ -76,6 +80,11 @@ function SignupPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!capturedImage) {
+      setError("Please capture a reference selfie to proceed.");
+      return;
+    }
+    
     setLoading(true);
     setStep(0);
     setError("");
@@ -118,6 +127,7 @@ function SignupPage() {
         mouse_event_count: mouseEventCountRef.current,
         total_keystrokes: keystrokeCountRef.current,
       },
+      reference_image: capturedImage,
     };
 
     try {
@@ -306,6 +316,42 @@ function SignupPage() {
                 <div className="group">
                   <label className="label-caps text-[var(--color-text-secondary)] block mb-1.5">Password</label>
                   <input type="password" required name="password" value={formData.password} onChange={handleChange} className="w-full px-4 py-3 bg-black/20 border border-white/5 rounded-xl text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-bob-orange)] focus:ring-1 focus:ring-[var(--color-bob-orange)]/50 transition-all text-white" />
+                </div>
+                
+                <div className="group col-span-2 mt-4">
+                  <label className="label-caps text-[var(--color-text-secondary)] block mb-1.5">Reference Selfie</label>
+                  {!capturedImage ? (
+                    <div className="w-full h-48 bg-black/40 rounded-xl overflow-hidden relative border border-white/5 flex flex-col items-center justify-center">
+                      <Webcam
+                        ref={webcamRef}
+                        audio={false}
+                        screenshotFormat="image/jpeg"
+                        videoConstraints={{ facingMode: "user" }}
+                        className="w-full h-full object-cover absolute inset-0"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const imageSrc = webcamRef.current?.getScreenshot();
+                          if (imageSrc) setCapturedImage(imageSrc);
+                        }}
+                        className="relative z-10 mt-auto mb-4 bg-[var(--color-bob-orange)] text-white px-6 py-2 rounded-full text-xs font-bold shadow-lg hover:bg-orange-600 transition"
+                      >
+                        Capture Selfie
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-full h-48 rounded-xl overflow-hidden relative border border-white/5">
+                      <img src={capturedImage} alt="Selfie" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setCapturedImage(null)}
+                        className="absolute top-3 right-3 bg-black/60 hover:bg-black text-white px-4 py-1.5 rounded-full text-xs font-bold backdrop-blur-sm transition"
+                      >
+                        Retake
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between text-[11px] px-3 py-2 bg-[var(--color-navy)]/60 border border-[var(--color-navy-border)] rounded-lg shadow-inner">

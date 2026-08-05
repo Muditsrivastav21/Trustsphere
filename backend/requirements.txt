@@ -9,3 +9,6 @@ slowapi==0.1.9
 scikit-learn==1.4.2
 numpy==1.26.4
 python-dotenv==1.0.1
+deepface==0.0.92
+mediapipe==0.10.14
+tf-keras==2.17.0

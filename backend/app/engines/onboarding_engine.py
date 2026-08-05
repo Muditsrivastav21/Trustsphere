@@ -8,8 +8,9 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 from app.database.supabase_client import get_supabase
-from app.utils.hashing import generate_fingerprint_hash
+from app.utils.hashing import generate_fingerprint_hash, hash_string
 from app.utils.logger import logger
+from app.services.graph_service import check_onboarding_graph_risk
 
 DISPOSABLE_DOMAINS = {"mailinator.com", "10minutemail.com", "tempmail.com", "guerrillamail.com", "sharklasers.com"}
 
@@ -40,6 +41,7 @@ def evaluate_onboarding_risk(
     ip_address: str,
     device_signals: dict,
     behavior_signals: dict,
+    reference_image: str | None = None,
 ) -> dict:
     """
     Score the onboarding attempt from 0 (High Risk) to 100 (Trusted).
@@ -86,6 +88,21 @@ def evaluate_onboarding_risk(
         score -= 20
         reason_codes.append("ELEVATED_VELOCITY")
 
+    # 2b. Graph Risk Checks (Cross-Time / Identity reuse)
+    id_number_hash = hash_string(id_number)
+    graph_risk = check_onboarding_graph_risk(
+        device_hash=device_hash,
+        ip_address=ip_address,
+        phone=phone,
+        id_number_hash=id_number_hash
+    )
+    if graph_risk.get("device_reuse_count", 0) > 1 or graph_risk.get("ip_reuse_count", 0) > 2:
+        score -= 70
+        reason_codes.append("CROSS_TIME_DEVICE_REUSE")
+    if graph_risk.get("duplicate_phone") or graph_risk.get("duplicate_id_hash"):
+        score -= 80
+        reason_codes.append("DUPLICATE_IDENTITY_SIGNAL")
+
     # 3. Behavioral Bot Signals
     typing_speed = behavior_signals.get("typing_speed_wpm", 0.0)
     mouse_event_count = behavior_signals.get("mouse_event_count", 0)
@@ -102,6 +119,38 @@ def evaluate_onboarding_risk(
         score -= 20
         reason_codes.append("NO_MOUSE_MOVEMENT")
 
+    # 4. Face Verification (Reference Photo)
+    embedding = None
+    if not reference_image:
+        score -= 100
+        reason_codes.append("NO_REFERENCE_IMAGE")
+    else:
+        try:
+            from deepface import DeepFace
+            import numpy as np
+            import base64
+            import cv2
+            
+            b64_data = reference_image.split(",")[1] if "," in reference_image else reference_image
+            img_data = base64.b64decode(b64_data)
+            nparr = np.frombuffer(img_data, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            
+            res = DeepFace.represent(img_path=img, model_name="Facenet512", enforce_detection=True)
+            if res and len(res) > 0:
+                embedding = res[0]["embedding"]
+            else:
+                score -= 100
+                reason_codes.append("NO_FACE_DETECTED")
+        except ValueError as e:
+            logger.warning(f"Face extraction failed (no face): {e}")
+            score -= 100
+            reason_codes.append("NO_FACE_DETECTED")
+        except Exception as e:
+            logger.warning(f"Face embedding error: {e}")
+            score -= 100
+            reason_codes.append("FACE_EXTRACTION_ERROR")
+
     # Clamp score
     score = max(0, min(100, int(score)))
 
@@ -117,5 +166,8 @@ def evaluate_onboarding_risk(
         "risk_score": score,
         "decision": decision,
         "reason_codes": reason_codes,
-        "device_hash": device_hash
+        "device_hash": device_hash,
+        "id_number_hash": id_number_hash,
+        "embedding": embedding,
+        "graph_risk": graph_risk
     }
