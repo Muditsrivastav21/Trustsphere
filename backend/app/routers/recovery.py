@@ -239,14 +239,23 @@ def reset_password(request: Request, req: ResetPasswordRequest, background_tasks
     if not user or not user.get("email"):
         raise HTTPException(status_code=400, detail="Could not resolve the account for this recovery session.")
 
+    # users.id (our internal PK, used as login_events.user_id) is NOT the
+    # same UUID as the Supabase Auth user — that's users.auth_id. The admin
+    # API operates on the auth.users id, so this must use auth_id, not
+    # user_id. (Caught by an actual live test against Supabase Auth, not a
+    # mock — see CHANGES.md.)
+    auth_id = user.get("auth_id")
+    if not auth_id:
+        raise HTTPException(status_code=400, detail="Could not resolve the account for this recovery session.")
+
     # 6. Call Supabase's admin API to actually set the new password.
     # Confirmed against the installed gotrue 2.12.3 source
     # (gotrue/_sync/gotrue_admin_api.py): update_user_by_id(uid, attributes)
     # exists, and AdminUserAttributes accepts a "password" key.
     try:
-        sb.auth.admin.update_user_by_id(user_id, {"password": req.new_password})
+        sb.auth.admin.update_user_by_id(auth_id, {"password": req.new_password})
     except Exception as e:
-        logger.error(f"Supabase admin password update failed for user {user_id}: {e}")
+        logger.error(f"Supabase admin password update failed for auth_id {auth_id}: {e}")
         # Do NOT mark the otp_session consumed — a transient failure here
         # shouldn't lock the user out of retrying.
         raise HTTPException(status_code=502, detail="Could not update your password right now. Please try again.")

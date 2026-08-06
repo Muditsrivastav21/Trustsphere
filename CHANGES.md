@@ -174,6 +174,30 @@ missing piece end-to-end:
 `backend/app/models/responses.py`, `backend/app/routers/{auth,sessions,config,insider,dashboard}.py`,
 `backend/scripts/add_password_reset_columns.sql`, `frontend/src/routes/recovery.tsx`
 
+### 17. Password reset called Supabase's admin API with the wrong user ID
+Once the migration was run, a full live end-to-end test against real
+Supabase Auth (not a mock) — create a throwaway user, initiate recovery,
+verify the real OTP, reset the password, then actually attempt to sign in
+with both the old and new passwords — caught a real bug: `reset-password`
+called `sb.auth.admin.update_user_by_id(user_id, ...)` using
+`users.id` (this app's own internal primary key, what `login_events.user_id`
+points to), but that admin API operates on the **Supabase Auth** user ID,
+which is stored separately as `users.auth_id`. These are two different
+UUIDs. The call was failing every time with "User not found" (HTTP 502),
+just never noticed before because no test had gone all the way to actually
+verifying the password changed via a real sign-in. Fixed to use
+`user["auth_id"]`.
+**Verified live** (test user created, driven through the full flow,
+password-changed proven via genuine `sign_in_with_password` calls with both
+the old password — correctly rejected — and new password — correctly
+accepted — then fully cleaned up, zero leftover rows): initiate → real OTP
+fetched via service-role DB access → verify → reset succeeds → second
+reset on the same session correctly rejected (400) → fabricated session_id
+correctly rejected (400, proving the BLOCK-decision invariant holds) →
+`users.password_changed_at` and `otp_sessions.password_reset_at` both
+stamped → `PASSWORD_RESET_COMPLETED` audit row present.
+**Files:** `backend/app/routers/recovery.py`
+
 ---
 
 ## Known open items (reported, not yet fixed)
@@ -182,10 +206,6 @@ missing piece end-to-end:
   duplicate-identity graph checks are inert for both login and onboarding.
 - **`onboarding_attempts` table still not created** (see #9) — run the SQL
   script when ready.
-- **`add_password_reset_columns.sql` (see #16) not yet run** — until it is,
-  `POST /api/recovery/reset-password` will reject every attempt at the
-  "verification window expired" check (gracefully, not a crash), since
-  `otp_sessions.verified_at` won't exist yet.
 - **Phase 4 (automated tests for the reset-password endpoint) not yet
   written** — mocked-Supabase tests covering: missing/unused session,
   expired window, double-reset, weak passwords, and the BLOCK-decision
