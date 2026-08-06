@@ -27,7 +27,7 @@ interface OverviewStats {
 }
 
 interface FeedEntry {
-  user: string; score: number; ip: string; action: string; t: string; loc: string; device_hash?: string; is_known_device?: boolean;
+  user: string; score: number; ip: string; action: string; t: string; loc: string; device_hash?: string; is_known_device?: boolean; flags?: string[];
 }
 
 function PremiumStatCard({ label, value, delta, tone, accent, gradient, icon }: { label: string; value: string; delta: string; tone: "up"|"down"|"neutral"; accent: string; gradient: string; icon?: React.ReactNode }) {
@@ -121,7 +121,8 @@ function Overview() {
           t: new Date(s.timestamp).toLocaleTimeString("en-GB", { hour12: false }),
           loc: s.location || "",
           device_hash: s.device_hash,
-          is_known_device: s.is_known_device
+          is_known_device: s.is_known_device,
+          flags: s.flags || []
         }));
         setFeed(entries);
       })
@@ -339,7 +340,15 @@ function Overview() {
                 </div>
                 
                 <div className="flex-1 min-w-0 pr-4">
-                  <div className="text-base font-bold text-[var(--color-text-main)] truncate tracking-wide mb-1.5">{isCustomer ? "You" : f.user}</div>
+                  <div className="text-base font-bold text-[var(--color-text-main)] truncate tracking-wide mb-1.5 flex items-center gap-2">
+                    {isCustomer ? "You" : f.user}
+                    {f.flags && f.flags.length > 0 && (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider bg-[var(--color-danger)]/10 text-[var(--color-danger)] border border-[var(--color-danger)]/20 shadow-sm shrink-0">
+                        <div className="w-1 h-1 rounded-full bg-[var(--color-danger)] animate-pulse"></div>
+                        {f.flags[0]} {f.flags.length > 1 && `+${f.flags.length - 1}`}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3">
                     <span className="font-mono text-[11px] text-[var(--color-text-dim)] tracking-wider flex items-center gap-1.5"><svg className="w-3.5 h-3.5 text-[var(--color-text-dim)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg> {f.ip}</span>
                     <span className="w-1 h-1 rounded-full bg-[var(--color-glass-border)]"></span>

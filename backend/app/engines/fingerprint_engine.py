@@ -8,7 +8,8 @@ from __future__ import annotations
 from app.database.supabase_client import get_supabase
 from app.utils.hashing import generate_fingerprint_hash
 from app.utils.logger import logger
-from functools import lru_cache
+import threading
+import time
 
 
 def _is_headless_browser(user_agent: str) -> bool:
@@ -27,9 +28,21 @@ def _is_mobile_ua(user_agent: str) -> bool:
     ua_lower = user_agent.lower()
     return any(marker in ua_lower for marker in mobile_markers)
 
-@lru_cache(maxsize=1000)
+_device_cache = {}
+_device_cache_lock = threading.Lock()
+CACHE_TTL = 60
+
 def _check_known_device_db(user_id: str, fingerprint_hash: str) -> dict | None:
-    """Check Supabase for known device and cache the result in memory."""
+    """Check Supabase for known device and cache the result in memory with a TTL."""
+    key = (user_id, fingerprint_hash)
+    now = time.time()
+    
+    with _device_cache_lock:
+        if key in _device_cache:
+            result, timestamp = _device_cache[key]
+            if now - timestamp < CACHE_TTL:
+                return result
+
     try:
         sb = get_supabase()
         result = (
@@ -39,12 +52,20 @@ def _check_known_device_db(user_id: str, fingerprint_hash: str) -> dict | None:
             .eq("fingerprint_hash", fingerprint_hash)
             .execute()
         )
-        if result.data and len(result.data) > 0:
-            return result.data[0]
-        return None
+        val = result.data[0] if (result.data and len(result.data) > 0) else None
+        
+        with _device_cache_lock:
+            _device_cache[key] = (val, time.time())
+            
+        return val
     except Exception as e:
         logger.warning(f"Device lookup failed: {e}")
         return None
+
+def invalidate_device_cache(user_id: str, fingerprint_hash: str) -> None:
+    """Invalidates the device cache entry for a given user and device hash."""
+    with _device_cache_lock:
+        _device_cache.pop((user_id, fingerprint_hash), None)
 
 
 def evaluate_device(
@@ -92,12 +113,23 @@ def evaluate_device(
     else:
         is_known_device = False
 
+    # --- Fetch user's home timezone ---
+    user_home_tz = "Asia/Kolkata"
+    try:
+        sb = get_supabase()
+        res = sb.table("users").select("home_timezone").eq("id", user_id).execute()
+        if res.data and len(res.data) > 0 and res.data[0].get("home_timezone"):
+            user_home_tz = res.data[0]["home_timezone"]
+    except Exception as e:
+        logger.warning(f"Failed to fetch home_timezone: {e}")
+
     # --- Scoring rules ---
     if not is_known_device:
         score -= 35
         flags.append("NEW_DEVICE")
 
-    if timezone != "Asia/Kolkata":
+    # Hackathon note: Fallback to Asia/Kolkata for brand-new users with no baseline yet
+    if timezone != user_home_tz:
         score -= 20
         flags.append("UNEXPECTED_TIMEZONE")
 

@@ -69,6 +69,17 @@ def upsert_device_fingerprint(user_id: str, fingerprint_hash: str, device: dict)
             "last_seen": now,
             "login_count": 1,
         }).execute()
+        
+    from app.engines.fingerprint_engine import invalidate_device_cache
+    invalidate_device_cache(user_id, fingerprint_hash)
+
+def update_user_home_region(user_id: str, home_country: str, home_timezone: str) -> None:
+    """Sets the initial baseline home country and timezone for a user."""
+    sb = get_supabase()
+    sb.table("users").update({
+        "home_country": home_country,
+        "home_timezone": home_timezone
+    }).eq("id", user_id).execute()
 
 
 def create_audit_log(event_type: str, description: str, metadata: dict | None = None, actor_id: str | None = None) -> None:

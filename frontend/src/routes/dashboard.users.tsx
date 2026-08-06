@@ -261,6 +261,44 @@ function UsersPage() {
                   </div>
                 </div>
               </div>
+              
+              {/* XAI Explanations & Flags */}
+              {(selectedUser.latest_flags?.length > 0 || selectedUser.xai_explanations?.length > 0) && (
+                <div>
+                  <h4 className="text-[11px] uppercase tracking-[0.2em] font-bold text-[var(--color-text-sub)] mb-6 ml-2 mt-2">Latest Session Risk Profile</h4>
+                  <div className="space-y-4">
+                    {selectedUser.latest_flags?.length > 0 && (
+                      <div className="bg-[var(--color-glass-bg)] p-5 rounded-2xl border border-[var(--color-glass-border)]">
+                        <div className="text-[10px] uppercase tracking-widest text-[var(--color-text-dim)] font-bold mb-3">Risk Flags</div>
+                        <div className="flex flex-wrap gap-3">
+                          {selectedUser.latest_flags.map((flag: string, idx: number) => (
+                            <span key={idx} className="text-xs font-mono font-bold tracking-wide px-3 py-1.5 bg-[var(--color-danger)]/10 text-[var(--color-danger)] rounded-lg border border-[var(--color-danger)]/30 shadow-[0_0_10px_rgba(232,56,79,0.1)] flex items-center gap-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-[var(--color-danger)] animate-pulse"></div>
+                              {flag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {selectedUser.xai_explanations?.length > 0 && (
+                      <div className="bg-[var(--color-danger)]/5 p-5 rounded-2xl border border-[var(--color-danger)]/20 shadow-[inset_0_0_15px_rgba(232,56,79,0.05)]">
+                        <div className="text-[10px] uppercase tracking-widest text-[var(--color-danger)] font-bold mb-3 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          Explainable AI (XAI) Reasons
+                        </div>
+                        <ul className="space-y-2 text-sm text-[var(--color-danger)] font-mono">
+                          {selectedUser.xai_explanations.map((exp: string, idx: number) => (
+                            <li key={idx} className="flex gap-3">
+                              <span className="opacity-50">[{idx+1}]</span> {exp}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             
             <div className="p-10 border-t border-[var(--color-glass-border)] bg-[var(--color-glass-bg)] backdrop-blur-3xl shrink-0 shadow-[0_-10px_50px_rgba(0,0,0,0.1)] dark:shadow-[0_-10px_50px_rgba(0,0,0,0.5)] relative z-20">

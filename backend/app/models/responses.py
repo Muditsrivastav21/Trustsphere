@@ -177,7 +177,8 @@ class OnboardingAttemptRow(BaseModel):
     name: str
     email: str
     phone: str
-    id_number: str
+    aadhaar_number: str
+    pan_number: str
     device_hash: str
     risk_score: int
     decision: str

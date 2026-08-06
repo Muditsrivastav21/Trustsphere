@@ -59,6 +59,7 @@
     "react-force-graph-3d": "^1.29.1",
     "react-hook-form": "^7.71.2",
     "react-resizable-panels": "^4.6.5",
+    "react-webcam": "^7.2.0",
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",

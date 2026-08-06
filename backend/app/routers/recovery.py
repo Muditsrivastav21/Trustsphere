@@ -128,7 +128,8 @@ async def initiate_recovery(request: Request, req: RecoveryInitRequest, backgrou
     )
 
 @router.post("/verify", response_model=OtpVerifyResponse)
-def verify_recovery(req: RecoveryVerifyRequest):
+@limiter.limit("3/minute")
+def verify_recovery(request: Request, req: RecoveryVerifyRequest):
     """Verify OTP for recovery."""
     verified, message = verify_otp(req.session_id, req.otp_code)
     if verified:
