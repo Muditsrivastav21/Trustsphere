@@ -84,6 +84,13 @@ class RecoveryVerifyRequest(BaseModel):
     otp_code: str
 
 
+class ResetPasswordRequest(BaseModel):
+    """POST /api/recovery/reset-password body."""
+    session_id: str
+    new_password: str
+    ip_address: str = "127.0.0.1"
+
+
 class ThresholdsUpdateRequest(BaseModel):
     """PUT /api/config/thresholds body."""
     threshold_allow: Optional[int] = None

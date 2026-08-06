@@ -206,3 +206,8 @@ class RecoveryInitResponse(BaseModel):
     risk_score: int
     reason_codes: list[str]
     message: str
+
+
+class ResetPasswordResponse(BaseModel):
+    success: bool
+    message: str

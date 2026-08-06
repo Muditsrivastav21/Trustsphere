@@ -136,6 +136,44 @@ page's inline registration mode entirely; "Register" now navigates to the
 real `/signup` flow via `<Link to="/signup">`.
 **Files:** `frontend/src/routes/login.tsx`
 
+### 16. Account recovery never actually reset the password
+`POST /api/recovery/initiate` correctly risk-scored attempts and sent an
+OTP, and `POST /api/recovery/verify` correctly checked it — but nothing
+ever changed the user's password. `recovery.tsx` just navigated to
+`/login` after OTP success, leaving the old password in place. Built the
+missing piece end-to-end:
+- **New `POST /api/recovery/reset-password`** — requires the session's OTP
+  to have been verified (`used == True`), within a 10-minute window of
+  verification (`otp_sessions.verified_at`, new column), and can only be
+  used once per verified session (`otp_sessions.password_reset_at`, new
+  column — set on success, checked before allowing a repeat). Validates
+  password strength server-side (length, not purely numeric, not on a
+  common-password list) with specific error messages. Resolves the target
+  user via the `login_events` row created in `initiate_recovery` (not a
+  fresh email lookup, which could resolve to a different account).
+  Actually updates the password via Supabase's admin API —
+  `sb.auth.admin.update_user_by_id(user_id, {"password": ...})` — confirmed
+  against the installed `gotrue` 2.12.3 source before writing the call, not
+  assumed from docs. Writes a `PASSWORD_RESET_COMPLETED` audit log and
+  sends a "your password was changed" notification (new, separate function
+  from the OTP email) to the account's actual registered email.
+- **Session invalidation fallback** — `gotrue` 2.12.3's admin API has no
+  method to revoke every active session for a `user_id` (only
+  `sign_out(jwt, scope)`, which needs a specific token). Added
+  `users.password_changed_at` (new column) plus a centralized
+  `session_service.is_token_stale()` check, wired into all 5 duplicated
+  copies of `get_current_user`/`get_admin_user`
+  (`auth.py`/`sessions.py`/`config.py`/`insider.py`/`dashboard.py`) —
+  rejects any JWT whose `iat` claim predates the last password change.
+- **Frontend**: `recovery.tsx` now shows a real "Set New Password" step
+  after OTP verification (matching the page's existing visual style),
+  client-side validates before submit, and shows a genuine success
+  confirmation before redirecting to `/login` — no more silent redirect.
+**Files:** `backend/app/routers/recovery.py`, `backend/app/services/otp_service.py`,
+`backend/app/services/session_service.py`, `backend/app/models/requests.py`,
+`backend/app/models/responses.py`, `backend/app/routers/{auth,sessions,config,insider,dashboard}.py`,
+`backend/scripts/add_password_reset_columns.sql`, `frontend/src/routes/recovery.tsx`
+
 ---
 
 ## Known open items (reported, not yet fixed)
@@ -144,6 +182,14 @@ real `/signup` flow via `<Link to="/signup">`.
   duplicate-identity graph checks are inert for both login and onboarding.
 - **`onboarding_attempts` table still not created** (see #9) — run the SQL
   script when ready.
+- **`add_password_reset_columns.sql` (see #16) not yet run** — until it is,
+  `POST /api/recovery/reset-password` will reject every attempt at the
+  "verification window expired" check (gracefully, not a crash), since
+  `otp_sessions.verified_at` won't exist yet.
+- **Phase 4 (automated tests for the reset-password endpoint) not yet
+  written** — mocked-Supabase tests covering: missing/unused session,
+  expired window, double-reset, weak passwords, and the BLOCK-decision
+  invariant. Doesn't require the migration to be run.
 - **`backend/ml/model.pkl` missing** — nobody's run `train_model.py` yet,
   so the IsolationForest anomaly-detection layer of behavioral biometrics
   is disabled (rule-based checks still work as a fallback).

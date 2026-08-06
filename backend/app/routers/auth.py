@@ -21,7 +21,7 @@ from app.engines.scoring_engine import calculate_trust_score
 from app.services.session_service import (
     create_login_event, create_behavioral_metrics,
     upsert_device_fingerprint, create_audit_log, get_user_by_auth_id,
-    get_or_create_user_profile,
+    get_or_create_user_profile, is_token_stale,
 )
 from app.services.graph_service import write_login_to_graph
 from app.services.otp_service import generate_otp, store_otp, verify_otp, send_email_otp
@@ -47,7 +47,10 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
     user = get_user_by_auth_id(auth_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
+    if is_token_stale(creds.credentials, user):
+        raise HTTPException(status_code=401, detail="Session expired due to a recent password change. Please sign in again.")
+
     return user
 
 @router.get("/me")
