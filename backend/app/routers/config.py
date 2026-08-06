@@ -55,8 +55,8 @@ def get_thresholds():
 
     return ThresholdsResponse(
         threshold_allow=int(config.get("threshold_allow", "80")),
-        threshold_otp=int(config.get("threshold_otp", "60")),
-        threshold_block=int(config.get("threshold_block", "40")),
+        threshold_otp=int(config.get("threshold_otp", "68")),
+        threshold_block=int(config.get("threshold_block", "56")),
         weights=WeightsInfo(
             device=float(config.get("weight_device", "0.40")),
             behavior=float(config.get("weight_behavior", "0.35")),

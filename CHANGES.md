@@ -1,0 +1,158 @@
+# TrustSphere AI — Change Log
+
+Running log of what's been fixed/changed during local dev testing, in order.
+Each entry: what broke or was missing, what was changed, which files.
+
+---
+
+### 1. Backend wouldn't start — missing `hash_string` function
+`backend/app/utils/hashing.py` was missing `hash_string()`, which
+`onboarding_engine.py` imported. Added a plain SHA-256 hex-digest helper.
+**Files:** `backend/app/utils/hashing.py`
+
+### 2. Frontend crashed under SSR — `sessionStorage` accessed at render time
+`ContinuousTrustProvider.tsx` called `sessionStorage.getItem(...)` directly
+during render, which breaks under TanStack Start's server-side rendering
+(no `sessionStorage` in Node). Guarded with a `typeof window !== "undefined"` check.
+**Files:** `frontend/src/contexts/ContinuousTrustProvider.tsx`
+
+### 3. ID document upload failed on PDFs
+`cv2.imdecode` can't decode PDF bytes as an image, so uploading a real
+e-Aadhaar/e-KYC PDF silently broke OCR and face-match. Added
+`image_decode.py` — detects PDF uploads and rasterizes the first page via
+PyMuPDF before handing it to OCR/face detection.
+**Files:** `backend/app/utils/image_decode.py`, `backend/requirements.txt`,
+`backend/app/engines/document_engine.py`, `backend/app/engines/face_verification_engine.py`
+
+### 4. ID format validation always assumed PAN format
+`validate_id_format()` defaulted to PAN's regex regardless of what ID type
+was actually submitted, so a valid 12-digit Aadhaar number always failed
+validation. Added auto-detection (PAN / AADHAAR / SSN / generic) based on
+the number's shape.
+**Files:** `backend/app/engines/document_engine.py`
+
+### 5. Face-mismatch was misreported when the document image couldn't be read
+When a document image failed to decode, face comparison never actually
+ran, but the code still reported it as `FACE_ID_MISMATCH` (implying a real
+mismatch). Split into a distinct `DOCUMENT_IMAGE_UNREADABLE`/
+`IMAGE_UNREADABLE` signal so a decode failure isn't confused with an actual
+face mismatch.
+**Files:** `backend/app/engines/face_verification_engine.py`,
+`backend/app/engines/onboarding_engine.py`
+
+### 6. Added two-step Aadhaar + PAN KYC flow
+Signup previously collected one generic "National ID" field/document.
+Rebuilt as a proper Indian KYC flow: separate Aadhaar and PAN number
+fields, separate document uploads for each, OCR + cross-check run on both,
+plus a cross-document consistency check (does the name on the Aadhaar
+match the name on the PAN).
+**Files:** `frontend/src/routes/signup.tsx`, `backend/app/models/requests.py`,
+`backend/app/models/responses.py`, `backend/app/engines/onboarding_engine.py`,
+`backend/app/routers/onboarding.py`, `backend/app/services/graph_service.py`
+
+### 7. Dashboard queried a table name that didn't exist (`audit_logs` typo)
+`dashboard.py`'s insider-alert stat queried `audit_logs` (plural); the real
+table everywhere else in the codebase is `audit_log` (singular). Fixed the
+typo.
+**Files:** `backend/app/routers/dashboard.py`
+
+### 8. Dashboard's "flagged recovery" stat queried a table that's never written to
+`recovery_attempts` doesn't exist as a table, and nothing in the codebase
+ever wrote to it — recovery attempts are actually logged into
+`login_events` with `auth_action = "RECOVERY_{decision}"`. Fixed the query
+to read from the real source of truth instead of creating a dead table.
+**Files:** `backend/app/routers/dashboard.py`
+
+### 9. `onboarding_attempts` Supabase table was missing entirely
+Needed by signup, the analyst onboarding-review dashboard, and the
+velocity-abuse check. Can't be created via the backend's Supabase client
+(no DDL over REST) — wrote the `CREATE TABLE` SQL for you to run once in
+the Supabase SQL Editor. **Not yet run** — table still missing as of
+today, so onboarding attempts aren't persisted or reviewable yet.
+**Files:** `backend/scripts/create_onboarding_attempts_table.sql`
+
+### 10. Webcam gave a silent black box on failure
+`react-webcam` had no error handler, so a blocked/denied camera permission
+just showed a permanently blank box with no explanation. Added
+`onUserMediaError`/`onUserMedia` handlers with a visible, specific message
+(permission blocked / no camera / camera in use).
+**Files:** `frontend/src/routes/signup.tsx`
+
+### 11. KYC accepted any document as "the ID" — no type or number verification
+OCR only checked "does the applicant's name appear somewhere in this
+image" — it never checked whether the uploaded file was actually an
+Aadhaar/PAN card, and `extracted_id_number` existed in the schema but was
+never populated or compared against what was typed. Added:
+- Document-type verification via fuzzy keyword/marker matching
+  (`WRONG_{LABEL}_DOCUMENT_TYPE`)
+- Printed-number extraction + cross-check against the form-submitted
+  number (`{LABEL}_NUMBER_MISMATCH`)
+- `UNVERIFIABLE_{LABEL}_DOCUMENT_TYPE` — escalates to manual review instead
+  of silently passing when OCR can't extract enough text to judge the type
+**Files:** `backend/app/engines/document_engine.py`,
+`backend/app/engines/onboarding_engine.py`
+
+### 12. Root `.gitignore` was silently broken (UTF-16 encoded)
+Had a `FFFE` BOM — git can't parse UTF-16 ignore files, so it was
+completely non-functional. Also `frontend/.gitignore` had no `.env` rule.
+Rewrote both as plain UTF-8; verified no real secrets were staged before
+the first commit/push.
+**Files:** `.gitignore`, `frontend/.gitignore`, `backend/.gitignore`
+
+### 13. Scoring thresholds disagreed across three places
+`system_config` (the real, live values) has `allow=80, otp=68, block=56`.
+But the *fallback* defaults used when Supabase is unreachable didn't match
+that or each other: `responses.py`'s `ThresholdsResponse` defaulted to
+`80/60/40`, `config.py`'s per-key fallback also used `80/60/40`, while
+`scoring_engine.py` (which actually gates login decisions) defaulted to
+`85/60/45`. A Supabase outage would have made the dashboard display
+different thresholds than what was actually being enforced. All three now
+default to `80/68/56`, matching the real configured values.
+**Files:** `backend/app/models/responses.py`, `backend/app/routers/config.py`,
+`backend/app/engines/scoring_engine.py`
+
+### 14. Dashboard's insider-alert count queried the wrong `event_type`
+`dashboard.py`'s `insider_alerts_count` stat filtered `audit_log` for
+`event_type = "INSIDER_THREAT_ALERT"`, but the code that actually writes
+insider-threat flags (`session_service.create_audit_log`) uses
+`"INSIDER_THREAT_FLAGGED"` — the same value the dedicated
+`/api/insider/anomalies` endpoint correctly queries. Result: the dashboard
+stat was silently always 0, even though insider-threat detection itself
+worked fine. Same bug class as #7 (`audit_logs`/`audit_log`) — that fix
+only corrected the table name on that line, not this value.
+Verified live: triggered a real `HIGH_VOLUME_ANOMALY` flag (3 rapid
+`CONFIG_UPDATED` actions by one actor) and confirmed the fixed query finds
+it (2 rows) while the old query still returns 0.
+**Files:** `backend/app/routers/dashboard.py`
+
+### 15. Login page's "Register" link bypassed KYC entirely
+There were two disconnected front doors into account creation: the real
+`/signup` KYC flow (Aadhaar/PAN, OCR, face-match, fraud scoring), and a
+second, completely separate "Register" toggle right on the login page that
+called `supabase.auth.signUp()` directly with just email/password/name —
+skipping every fraud check built today. Anyone could create an account
+through the login page and never touch KYC at all. Removed the login
+page's inline registration mode entirely; "Register" now navigates to the
+real `/signup` flow via `<Link to="/signup">`.
+**Files:** `frontend/src/routes/login.tsx`
+
+---
+
+## Known open items (reported, not yet fixed)
+
+- **Neo4j AuraDB unreachable** (DNS resolution failing) — fraud-ring/
+  duplicate-identity graph checks are inert for both login and onboarding.
+- **`onboarding_attempts` table still not created** (see #9) — run the SQL
+  script when ready.
+- **`backend/ml/model.pkl` missing** — nobody's run `train_model.py` yet,
+  so the IsolationForest anomaly-detection layer of behavioral biometrics
+  is disabled (rule-based checks still work as a fallback).
+- **`determine_auth_action()` in `auth_engine.py` is dead code** — never
+  called; `scoring_engine.py` reimplements the same logic inline instead.
+- **No liveness/anti-spoofing check** — identical selfie+ID-photo exploit
+  confirmed live-testable (see KYC audit).
+- **`behavior_signals` (typing/mouse telemetry) aren't cryptographically
+  verified server-side** — a scripted client can send plausible fake values.
+- **Document-type/number checks are keyword/regex-based**, not true
+  forgery detection — won't catch a well-made fake with correct-looking
+  branding and a fake-but-correctly-formatted number.

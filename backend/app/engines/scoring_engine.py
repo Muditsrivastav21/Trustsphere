@@ -35,8 +35,14 @@ def _get_weights() -> dict[str, float]:
 
 
 def _get_thresholds() -> dict[str, int]:
-    """Load risk thresholds from the system_config table."""
-    defaults = {"allow": 85, "otp": 60, "block": 45}
+    """
+    Load risk thresholds from the system_config table.
+    Fallback defaults below must stay in sync with the live system_config
+    row values and with config.py's get_thresholds()/ThresholdsResponse
+    defaults — otherwise a Supabase outage would make the dashboard display
+    different thresholds than what's actually being enforced on login.
+    """
+    defaults = {"allow": 80, "otp": 68, "block": 56}
     try:
         sb = get_supabase()
         result = (

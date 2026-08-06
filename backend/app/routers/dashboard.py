@@ -87,7 +87,7 @@ def stats_overview(current_user: dict = Depends(get_current_user)):
             )
             flagged_recovery = len(recovery_req.data) if recovery_req.data else 0
             
-            insider_req = sb.table("audit_log").select("id, event_type").eq("event_type", "INSIDER_THREAT_ALERT").execute()
+            insider_req = sb.table("audit_log").select("id, event_type").eq("event_type", "INSIDER_THREAT_FLAGGED").execute()
             insider_alerts = len(insider_req.data) if insider_req.data else 0
         except Exception as ex:
             logger.warning(f"Failed to fetch new module stats: {ex}")
