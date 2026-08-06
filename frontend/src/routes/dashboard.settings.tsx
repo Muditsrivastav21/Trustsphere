@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 import { DashHeader } from "@/components/Sidebar";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/dashboard/settings")({
   head: () => ({ meta: [{ title: "Settings · TrustSphere" }] }),
@@ -15,7 +16,7 @@ function SettingsPage() {
   const { role } = useAuth();
   const isCustomer = role === "customer";
   const categories = isCustomer 
-    ? ["Trusted Devices", "Security Rules"] 
+    ? ["Trusted Devices", "Security Rules", "Emergency Freeze"] 
     : ["Risk Thresholds", "Notification Rules", "Audit Log", "API Configuration"];
 
   const [tab, setTab] = useState(0);
@@ -33,6 +34,14 @@ function SettingsPage() {
   });
   const [auditEntries, setAuditEntries] = useState<any[]>([]);
   const [devices, setDevices] = useState<any[]>([]);
+
+  // Emergency Freeze state
+  const [isFreezeModalOpen, setIsFreezeModalOpen] = useState(false);
+  const [freezeReasonSelect, setFreezeReasonSelect] = useState("Suspected unauthorized access");
+  const [freezeDetail, setFreezeDetail] = useState("");
+  const [freezing, setFreezing] = useState(false);
+  const [freezeError, setFreezeError] = useState("");
+  const [accountFrozenState, setAccountFrozenState] = useState(false);
 
   // Load thresholds from backend
   useEffect(() => {
@@ -187,9 +196,54 @@ function SettingsPage() {
                   ].map(t => (
                     <div key={t.k} className="flex items-center justify-between p-4 bg-[var(--color-glass-bg)] border border-[var(--color-glass-border)] rounded-2xl hover:bg-[var(--color-glass-hover)] transition-colors group">
                       <div className="text-sm font-medium text-[var(--color-text-sub)] group-hover:text-[var(--color-text-main)] transition-colors">{t.l}</div>
-                      <Toggle on={(customerToggles as any)[t.k]} onChange={() => setCustomerToggles(s => ({ ...s, [t.k]: !(s as any)[t.k] }))}/>
+                      <Toggle on={(customerToggles as any)[t.k]} onChange={() => setCustomerToggles((s: any) => ({ ...s, [t.k]: !(s as any)[t.k] }))}/>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {isCustomer && tab === 2 && (
+              <div className="space-y-8 animate-fade-in">
+                <div>
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-red-400 font-bold">Emergency Action</div>
+                  <h3 className="text-2xl font-extrabold mt-1 text-[var(--color-text-main)]">Emergency Freeze (Kill Switch)</h3>
+                  <p className="text-sm text-[var(--color-text-sub)] mt-2">
+                    Immediately terminate all active sessions and block any future login attempts if you suspect account compromise or lost devices.
+                  </p>
+                </div>
+                
+                <div className="bg-red-500/10 border border-red-500/30 p-6 rounded-[24px] space-y-6 shadow-[0_0_30px_rgba(239,68,68,0.1)]">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <div className="text-xs font-mono uppercase tracking-widest text-[var(--color-text-dim)] font-bold">Account Security Status</div>
+                      <div className="flex items-center gap-3 mt-2">
+                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-bold uppercase ${accountFrozenState ? 'bg-red-500/20 text-red-400 border border-red-500/40' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'}`}>
+                          <span className={`w-2 h-2 rounded-full ${accountFrozenState ? 'bg-red-400 animate-pulse' : 'bg-emerald-400'}`}></span>
+                          {accountFrozenState ? "Frozen - Pending Analyst Review" : "Active & Protected"}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <button 
+                      onClick={() => setIsFreezeModalOpen(true)}
+                      className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-bold text-sm tracking-wider uppercase rounded-xl transition-all shadow-[0_4px_20px_rgba(220,38,38,0.4)] hover:shadow-[0_6px_25px_rgba(220,38,38,0.6)] flex items-center gap-2 shrink-0"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                      </svg>
+                      Freeze Account
+                    </button>
+                  </div>
+
+                  <div className="border-t border-red-500/20 pt-4 text-xs text-red-200/80 space-y-2 font-mono">
+                    <p>⚡ <strong>What happens when you freeze your account:</strong></p>
+                    <ul className="list-disc list-inside space-y-1 pl-2 text-red-300/70">
+                      <li>All active web and mobile sessions will be terminated immediately.</li>
+                      <li>Login via Password, Google OAuth, and MFA OTP will be strictly blocked.</li>
+                      <li>A Security Analyst will review your request before your account can be reactivated.</li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             )}
@@ -331,6 +385,99 @@ function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Freeze Confirmation Modal */}
+      {isFreezeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-md" onClick={() => setIsFreezeModalOpen(false)}></div>
+          <div className="relative bg-[#0d1520] border-2 border-red-500/40 rounded-3xl p-8 max-w-md w-full shadow-[0_0_50px_rgba(239,68,68,0.3)] animate-scale-up space-y-6 z-10">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 shrink-0">
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-xl font-extrabold text-white">Emergency Lockout</h4>
+                <p className="text-xs text-red-400 font-mono">Confirm Account Freeze</p>
+              </div>
+            </div>
+
+            {freezeError && (
+              <div className="p-3 bg-red-500/20 border border-red-500/40 rounded-xl text-xs text-red-300 font-mono">
+                {freezeError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-gray-300 mb-2 font-bold">Reason for Freeze</label>
+                <select
+                  value={freezeReasonSelect}
+                  onChange={e => setFreezeReasonSelect(e.target.value)}
+                  className="w-full px-4 py-3 bg-black/40 border border-gray-700 rounded-xl text-sm text-white focus:border-red-500 outline-none"
+                >
+                  <option value="Suspected unauthorized access">Suspected unauthorized access</option>
+                  <option value="Lost device">Lost device</option>
+                  <option value="Suspicious activity">Suspicious activity</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-gray-300 mb-2 font-bold">Additional Details (Optional)</label>
+                <textarea
+                  value={freezeDetail}
+                  onChange={e => setFreezeDetail(e.target.value)}
+                  placeholder="Provide any context for the security analyst..."
+                  rows={3}
+                  className="w-full px-4 py-3 bg-black/40 border border-gray-700 rounded-xl text-sm text-white focus:border-red-500 outline-none resize-none placeholder-gray-500"
+                ></textarea>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsFreezeModalOpen(false)}
+                className="px-5 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-sm font-bold transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={freezing}
+                onClick={async () => {
+                  setFreezing(true);
+                  setFreezeError("");
+                  try {
+                    const fullReason = freezeDetail ? `${freezeReasonSelect}: ${freezeDetail}` : freezeReasonSelect;
+                    const res = await apiFetch(`${API_BASE}/api/auth/freeze`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ reason: fullReason }),
+                    });
+                    if (!res.ok) {
+                      const errData = await res.json().catch(() => ({}));
+                      throw new Error(errData.detail || "Failed to freeze account.");
+                    }
+                    setAccountFrozenState(true);
+                    await supabase.auth.signOut();
+                    sessionStorage.clear();
+                    window.location.href = "/login?frozen=true";
+                  } catch (err: any) {
+                    setFreezeError(err.message || "Failed to freeze account");
+                    setFreezing(false);
+                  }
+                }}
+                className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(220,38,38,0.4)] flex items-center gap-2"
+              >
+                {freezing ? "Freezing..." : "Confirm Account Freeze"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

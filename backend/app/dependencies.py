@@ -39,6 +39,13 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)) ->
             detail="Session expired due to a recent password change. Please sign in again.",
         )
 
+    if user.get("risk_profile") == "FROZEN":
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been frozen for security reasons. Access is disabled "
+                   "until your request is reviewed and approved by a security analyst.",
+        )
+
     return user
 
 

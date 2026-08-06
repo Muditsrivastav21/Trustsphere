@@ -152,6 +152,13 @@ class OtpVerifyResponse(BaseModel):
     message: str
 
 
+class ResendOtpResponse(BaseModel):
+    status: str
+    message: str
+    resend_count: int
+    demo_otp: Optional[str] = None
+
+
 # ─── Audit Log ──────────────────────────────────────────────
 
 class AuditEntry(BaseModel):

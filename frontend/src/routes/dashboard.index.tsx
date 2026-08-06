@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { DashHeader } from "@/components/Sidebar";
 import { MiniTrustRing } from "@/components/TrustRing";
 import { useAuth } from "@/contexts/AuthContext";
@@ -70,8 +71,14 @@ function Overview() {
 
   const triggerFreeze = async () => {
     try {
-      await apiFetch(`${API_BASE}/api/auth/freeze`, { method: "POST" });
-      setIsFrozen(true);
+      await apiFetch(`${API_BASE}/api/auth/freeze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Emergency lock requested by customer from dashboard" }),
+      });
+      await supabase.auth.signOut();
+      sessionStorage.clear();
+      window.location.href = "/login?frozen=true";
     } catch {}
   };
 
@@ -131,10 +138,33 @@ function Overview() {
 
   useEffect(() => {
     fetchData();
+
+    const channel = supabase
+      .channel("public:overview_realtime_users")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "users" },
+        () => {
+          fetchData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "login_events" },
+        () => {
+          fetchData();
+        }
+      )
+      .subscribe();
+
     const interval = setInterval(() => {
       fetchData();
-    }, 5000);
-    return () => clearInterval(interval);
+    }, 3000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [isSimulating]); // re-bind when isSimulating changes
 
   const injectSimulatedTraffic = (channel: string) => {
