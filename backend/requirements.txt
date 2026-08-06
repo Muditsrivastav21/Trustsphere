@@ -1,0 +1,11 @@
+fastapi==0.111.0
+uvicorn==0.29.0
+pydantic==2.7.1
+pydantic-settings==2.2.1
+neo4j==5.19.0
+supabase==2.4.6
+httpx==0.27.0
+slowapi==0.1.9
+scikit-learn==1.4.2
+numpy==1.26.4
+python-dotenv==1.0.1
