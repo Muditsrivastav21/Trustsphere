@@ -19,19 +19,45 @@ def get_easyocr_reader():
         return None
 
 
-def extract_document_fields(image_base64: str) -> dict:
+# Markers that should appear on a genuine document of each type. OCR is noisy,
+# so these are matched with fuzzy tolerance (see _has_any_marker) rather than
+# exact substring checks.
+DOCUMENT_TYPE_MARKERS = {
+    "AADHAAR": ["GOVERNMENT OF INDIA", "UNIQUE IDENTIFICATION AUTHORITY", "UIDAI", "AADHAAR"],
+    "PAN": ["INCOME TAX DEPARTMENT", "PERMANENT ACCOUNT NUMBER", "GOVT OF INDIA", "INCOME TAX"],
+}
+
+# Patterns for the ID number as it's actually printed on each document type,
+# used to cross-check against what the applicant typed into the form.
+DOCUMENT_NUMBER_PATTERNS = {
+    "AADHAAR": r'\b(\d{4}\s?\d{4}\s?\d{4})\b',
+    "PAN": r'\b([A-Z]{5}\d{4}[A-Z])\b',
+}
+
+
+def _has_any_marker(raw_text: str, markers: list[str], threshold: int = 75) -> bool:
+    """Fuzzy-check whether any expected marker phrase appears in the OCR'd text."""
+    text_upper = raw_text.upper()
+    return any(fuzz.partial_ratio(marker, text_upper) >= threshold for marker in markers)
+
+
+def extract_document_fields(image_base64: str, doc_type: str | None = None) -> dict:
     """
-    Runs OCR on the document image and attempts to parse Name and DOB.
-    Returns a dict with extracted fields and an overall OCR confidence.
+    Runs OCR on the document image and attempts to parse Name, DOB, and the
+    printed ID number. When `doc_type` is given ("AADHAAR" or "PAN"), also
+    checks whether the document actually looks like that document type
+    (expected government/authority markers) rather than assuming any image
+    with the applicant's name on it is acceptable.
     """
     result = {
         "extracted_name": "",
         "extracted_dob": "",
         "extracted_id_number": "",
         "ocr_confidence": 0.0,
-        "raw_text": ""
+        "raw_text": "",
+        "document_type_verified": None,  # None = not checked (no doc_type given)
     }
-    
+
     if not image_base64:
         return result
 
@@ -46,37 +72,59 @@ def extract_document_fields(image_base64: str) -> dict:
         if not reader:
             logger.error("EasyOCR reader not available")
             return result
-            
+
         ocr_out = reader.readtext(img)
-        
+
         text_lines = []
         confidences = []
         for bbox, text, conf in ocr_out:
             text_lines.append(text)
             confidences.append(conf)
-            
+
         result["raw_text"] = " ".join(text_lines)
         if confidences:
             result["ocr_confidence"] = float(sum(confidences) / len(confidences))
-            
+
         # Basic heuristic parsing for demo purposes
         # In a real system, you'd use a template matcher or layout LM.
         full_text = " ".join(text_lines)
-        
+
         # Look for DOB (DD/MM/YYYY or similar)
         dob_match = re.search(r'\b(\d{2}[-/]\d{2}[-/]\d{4})\b', full_text)
         if dob_match:
             result["extracted_dob"] = dob_match.group(1)
-            
+
         # Look for Name (simple heuristic: first line that looks like a name)
         # For simplicity in this demo, we won't extract the name directly from random text reliably.
         # But we'll try to find a capitalized 2-3 word string.
         # Alternatively, since we just fuzzy match, we can just return the raw text to cross-check.
         result["extracted_name"] = full_text  # We'll use the full text block for fuzzy matching the name
 
+        # Extract the ID number as printed on the document (for cross-check
+        # against the form-submitted number). Matched per individual OCR'd
+        # line rather than against the flattened full_text blob — joining
+        # every detected text box into one string risks gluing digits from
+        # unrelated lines together (e.g. a DOB year run into part of the ID
+        # number) since EasyOCR's detection order doesn't guarantee the
+        # original top-to-bottom layout.
+        if doc_type and doc_type.upper() in DOCUMENT_NUMBER_PATTERNS:
+            pattern = DOCUMENT_NUMBER_PATTERNS[doc_type.upper()]
+            for line in text_lines:
+                num_match = re.search(pattern, line.upper())
+                if num_match:
+                    result["extracted_id_number"] = num_match.group(1)
+                    break
+
+        # Verify the document actually looks like the claimed type — only
+        # judge this when there's enough OCR'd text to make the call fairly;
+        # a near-empty raw_text is already penalized separately as low OCR
+        # confidence, and shouldn't also be double-penalized as "wrong type".
+        if doc_type and doc_type.upper() in DOCUMENT_TYPE_MARKERS and len(full_text.strip()) >= 15:
+            result["document_type_verified"] = _has_any_marker(full_text, DOCUMENT_TYPE_MARKERS[doc_type.upper()])
+
     except Exception as e:
         logger.warning(f"Document OCR extraction failed: {e}")
-        
+
     return result
 
 

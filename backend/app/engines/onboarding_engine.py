@@ -64,7 +64,7 @@ def _process_id_document(
         delta -= 40
         reason_codes.append(f"INVALID_{label}_FORMAT")
 
-    fields = extract_document_fields(image)
+    fields = extract_document_fields(image, doc_type=id_type)
 
     if fields.get("decode_error"):
         delta -= 40
@@ -72,6 +72,31 @@ def _process_id_document(
     elif fields.get("ocr_confidence", 0) < 0.3:
         delta -= 30
         reason_codes.append(f"LOW_{label}_OCR_CONFIDENCE")
+
+    # Does this image actually look like the claimed document type at all —
+    # not just "does it have the applicant's name on it somewhere"? Catches
+    # the wrong card type, an unrelated document, or a random photo being
+    # uploaded in this slot.
+    if fields.get("document_type_verified") is False:
+        delta -= 60
+        reason_codes.append(f"WRONG_{label}_DOCUMENT_TYPE")
+    elif fields.get("document_type_verified") is None and not fields.get("decode_error"):
+        # Not enough OCR'd text to confirm this is genuinely the claimed
+        # document type. Don't silently pass it — escalate toward manual
+        # review rather than trusting an unverifiable document.
+        delta -= 15
+        reason_codes.append(f"UNVERIFIABLE_{label}_DOCUMENT_TYPE")
+
+    # Does the ID number actually printed on the document match what the
+    # applicant typed into the form? Prevents "type a made-up but
+    # correctly-formatted number, upload any document with my name on it."
+    extracted_num = fields.get("extracted_id_number", "")
+    if extracted_num:
+        norm_extracted = re.sub(r'[\s-]', '', extracted_num).upper()
+        norm_typed = re.sub(r'[\s-]', '', id_number).upper()
+        if norm_extracted != norm_typed:
+            delta -= 70
+            reason_codes.append(f"{label}_NUMBER_MISMATCH")
 
     if fields.get("extracted_name"):
         cross_check = cross_check_fields(

@@ -22,7 +22,15 @@ function RecoveryPage() {
   // OTP state
   const [otp, setOtp] = useState("");
   const [verifying, setVerifying] = useState(false);
-  
+
+  // Set-new-password state (after OTP verification succeeds)
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetting, setResetting] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const [resetError, setResetError] = useState("");
+
   const [activeSignal, setActiveSignal] = useState(false);
   const signalTimeoutRef = useRef<number | null>(null);
 
@@ -152,13 +160,63 @@ function RecoveryPage() {
       });
       const data = await resp.json();
       if (data.verified) {
-        navigate({ to: "/login" });
+        setOtpVerified(true);
+        setVerifying(false);
       } else {
         throw new Error(data.message || "Invalid OTP");
       }
     } catch (err: any) {
       setError(err.message);
       setVerifying(false);
+    }
+  };
+
+  const submitNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError("");
+
+    // Client-side checks only — not a replacement for the server-side
+    // validation in reset-password, just avoids an obviously-bad round trip.
+    if (newPassword.length < 8) {
+      setResetError("Password must be at least 8 characters long.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setResetError("Passwords do not match.");
+      return;
+    }
+
+    setResetting(true);
+
+    let clientIp = "127.0.0.1";
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const ipRes = await fetch("https://api.ipify.org?format=json", { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (ipRes.ok) {
+        const ipData = await ipRes.json();
+        clientIp = ipData.ip;
+      }
+    } catch (e) {
+      console.warn("Could not fetch IP", e);
+    }
+
+    try {
+      const resp = await fetch(`${API_BASE}/api/recovery/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: result.session_id, new_password: newPassword, ip_address: clientIp }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || "Could not reset your password.");
+
+      setResetting(false);
+      setResetSuccess(true);
+      setTimeout(() => navigate({ to: "/login" }), 2000);
+    } catch (err: any) {
+      setResetError(err.message);
+      setResetting(false);
     }
   };
 
@@ -232,6 +290,37 @@ function RecoveryPage() {
                     <p className="text-[var(--color-text-secondary)] text-sm mb-6">{result.message}</p>
                     <Link to="/" className="text-[var(--color-bob-orange)] hover:underline text-sm font-semibold">Return Home</Link>
                   </div>
+                ) : resetSuccess ? (
+                  <div className="text-center">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-[var(--color-success)]/20 flex items-center justify-center mb-4 border border-[var(--color-success)]/50">
+                      <svg className="w-8 h-8 text-[var(--color-success)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                    </div>
+                    <h2 className="text-2xl font-bold text-white mb-2">Password Updated</h2>
+                    <p className="text-[var(--color-text-secondary)] text-sm">Please sign in with your new password. Redirecting…</p>
+                  </div>
+                ) : otpVerified ? (
+                  <div className="text-center">
+                    <div className="w-12 h-12 mx-auto rounded-full bg-yellow-500/20 flex items-center justify-center mb-4 border border-yellow-500/50">
+                      <svg className="w-6 h-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                    </div>
+                    <h2 className="text-2xl font-bold text-white mb-2">Set New Password</h2>
+                    <p className="text-[var(--color-text-secondary)] text-sm mb-6">Identity confirmed. Choose a new password for your account.</p>
+
+                    <form onSubmit={submitNewPassword} className="space-y-4 text-left">
+                      <div className="group">
+                        <label className="label-caps text-[var(--color-text-secondary)] block mb-1.5">New Password</label>
+                        <input required type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="••••••••••" className="w-full px-4 py-3 bg-black/20 border border-white/5 rounded-xl text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-bob-orange)] focus:ring-1 focus:ring-[var(--color-bob-orange)]/50 transition-all text-white" />
+                      </div>
+                      <div className="group">
+                        <label className="label-caps text-[var(--color-text-secondary)] block mb-1.5">Confirm Password</label>
+                        <input required type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="••••••••••" className="w-full px-4 py-3 bg-black/20 border border-white/5 rounded-xl text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-bob-orange)] focus:ring-1 focus:ring-[var(--color-bob-orange)]/50 transition-all text-white" />
+                      </div>
+                      {resetError && <div className="text-sm text-[var(--color-danger)] bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/30 rounded-lg px-4 py-2">{resetError}</div>}
+                      <button type="submit" disabled={resetting} className="w-full py-3.5 rounded-xl font-semibold bg-gradient-to-r from-yellow-500 to-yellow-600 text-black shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
+                        {resetting ? "Updating…" : "Update Password"}
+                      </button>
+                    </form>
+                  </div>
                 ) : (
                   <div className="text-center">
                     {result.decision === "STEP_UP" ? (
@@ -243,10 +332,10 @@ function RecoveryPage() {
                         <svg className="w-6 h-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76" /></svg>
                       </div>
                     )}
-                    
+
                     <h2 className="text-2xl font-bold text-white mb-2">Enter Recovery Code</h2>
                     <p className="text-[var(--color-text-secondary)] text-sm mb-6">A 6-digit code has been sent to your email.</p>
-                    
+
                     <form onSubmit={verifyOtp} className="space-y-4">
                       <input required type="text" maxLength={6} value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g, ''))} placeholder="000000" className="w-full text-center tracking-[0.5em] font-mono text-2xl px-4 py-3 bg-black/20 border border-white/5 rounded-xl placeholder:text-white/20 focus:border-[var(--color-bob-orange)] focus:ring-1 focus:ring-[var(--color-bob-orange)]/50 transition-all text-white" />
                       {error && <div className="text-sm text-[var(--color-danger)] bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/30 rounded-lg px-4 py-2">{error}</div>}
@@ -256,14 +345,16 @@ function RecoveryPage() {
                     </form>
                   </div>
                 )}
-                
-                {/* Diagnostics */}
-                <div className="mt-8 p-4 bg-black/40 rounded-xl text-left border border-white/5">
-                  <div className="text-xs text-[var(--color-text-muted)] label-caps mb-2">Diagnostics</div>
-                  <div className="font-mono text-[11px] text-[var(--color-text-secondary)]">Decision: <span className={result.decision === 'ALLOW' ? 'text-[var(--color-success)]' : result.decision === 'STEP_UP' ? 'text-yellow-400' : 'text-[var(--color-danger)]'}>{result.decision}</span></div>
-                  <div className="font-mono text-[11px] text-[var(--color-text-secondary)] mt-1">Risk Score: <span className={result.risk_score >= 80 ? 'text-[var(--color-success)]' : result.risk_score >= 50 ? 'text-yellow-400' : 'text-[var(--color-danger)]'}>{result.risk_score}/100</span></div>
-                  <div className="font-mono text-[11px] text-[var(--color-text-secondary)] mt-1">Reasons: {result.reason_codes.length > 0 ? result.reason_codes.join(', ') : 'None'}</div>
-                </div>
+
+                {/* Diagnostics — only relevant before identity is confirmed */}
+                {!otpVerified && (
+                  <div className="mt-8 p-4 bg-black/40 rounded-xl text-left border border-white/5">
+                    <div className="text-xs text-[var(--color-text-muted)] label-caps mb-2">Diagnostics</div>
+                    <div className="font-mono text-[11px] text-[var(--color-text-secondary)]">Decision: <span className={result.decision === 'ALLOW' ? 'text-[var(--color-success)]' : result.decision === 'STEP_UP' ? 'text-yellow-400' : 'text-[var(--color-danger)]'}>{result.decision}</span></div>
+                    <div className="font-mono text-[11px] text-[var(--color-text-secondary)] mt-1">Risk Score: <span className={result.risk_score >= 80 ? 'text-[var(--color-success)]' : result.risk_score >= 50 ? 'text-yellow-400' : 'text-[var(--color-danger)]'}>{result.risk_score}/100</span></div>
+                    <div className="font-mono text-[11px] text-[var(--color-text-secondary)] mt-1">Reasons: {result.reason_codes.length > 0 ? result.reason_codes.join(', ') : 'None'}</div>
+                  </div>
+                )}
               </div>
             ) : loading ? (
               <div className="py-8 flex flex-col items-center justify-center space-y-8 animate-fade-in">
