@@ -329,7 +329,10 @@ function LoginPage() {
                   <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="customer@email.com" className="w-full px-4 py-3.5 bg-black/20 border border-white/5 rounded-xl text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-bob-orange)] focus:ring-2 focus:ring-[var(--color-bob-orange)]/20 transition-all duration-300 shadow-inner text-white" />
                 </div>
                 <div className="group">
-                  <label className="label-caps text-[var(--color-text-secondary)] block mb-2 group-focus-within:text-[var(--color-bob-orange)] transition-colors">Password</label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="label-caps text-[var(--color-text-secondary)] group-focus-within:text-[var(--color-bob-orange)] transition-colors">Password</label>
+                    <Link to="/recovery" className="text-xs text-[var(--color-bob-orange)] hover:underline hover:text-white transition-colors font-semibold">Forgot password?</Link>
+                  </div>
                   <input required value={pwd} onChange={e=>setPwd(e.target.value)} type="password" placeholder="••••••••••" className="w-full px-4 py-3.5 bg-black/20 border border-white/5 rounded-xl text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-bob-orange)] focus:ring-2 focus:ring-[var(--color-bob-orange)]/20 transition-all duration-300 shadow-inner text-white" />
                 </div>
 

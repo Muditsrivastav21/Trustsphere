@@ -198,6 +198,15 @@ correctly rejected (400, proving the BLOCK-decision invariant holds) →
 stamped → `PASSWORD_RESET_COMPLETED` audit row present.
 **Files:** `backend/app/routers/recovery.py`
 
+### 18. Login page had no way to reach account recovery
+`/recovery` worked end-to-end (see #16, #17) but nothing on `/login`
+actually linked to it — same class of gap as #15 (the KYC-bypassing
+Register link), just the mirror image: a real feature that existed but was
+undiscoverable from the page a user would actually be on when they need
+it. Added a "Forgot password?" link next to the Password field label,
+routing to `/recovery`.
+**Files:** `frontend/src/routes/login.tsx`
+
 ---
 
 ## Known open items (reported, not yet fixed)
