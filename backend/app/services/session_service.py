@@ -142,6 +142,56 @@ def get_user_by_customer_id(customer_id: str) -> dict | None:
         return result.data[0]
     return None
 
+def get_user_by_id(user_id: str) -> dict | None:
+    """Look up a user by their internal users.id (not auth_id)."""
+    sb = get_supabase()
+    result = (
+        sb.table("users")
+        .select("*")
+        .eq("id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if result.data:
+        return result.data[0]
+    return None
+
+
+def is_token_stale(jwt_str: str, user: dict) -> bool:
+    """
+    Returns True if the given access token was issued *before* the user's
+    last password change (users.password_changed_at) and should therefore
+    be rejected.
+
+    Fallback session-invalidation mechanism: supabase-py's admin API
+    (confirmed against the installed gotrue 2.12.3 source) has no method to
+    revoke every active session for a given user_id — only
+    admin.sign_out(jwt, scope), which needs a specific token, not a
+    user_id. So instead of revoking old sessions server-side, we stamp
+    password_changed_at on reset and reject any token whose `iat`
+    (issued-at) claim predates it. The token was already verified as
+    genuine by the caller (via sb.auth.get_user()), so decoding it here
+    without re-verifying the signature is safe — we're only reading a claim
+    from a token Supabase's own server already vouched for.
+    """
+    password_changed_at = user.get("password_changed_at")
+    if not password_changed_at:
+        return False
+
+    try:
+        import jwt as pyjwt
+        payload = pyjwt.decode(jwt_str, options={"verify_signature": False})
+        issued_at = payload.get("iat")
+        if issued_at is None:
+            return False
+
+        changed_at_dt = datetime.fromisoformat(str(password_changed_at).replace("Z", "+00:00"))
+        return issued_at < changed_at_dt.timestamp()
+    except Exception as e:
+        logger.warning(f"Token staleness check failed, allowing request: {e}")
+        return False
+
+
 def get_user_by_auth_id(auth_id: str) -> dict | None:
     """Look up a user by their Supabase auth_id."""
     sb = get_supabase()

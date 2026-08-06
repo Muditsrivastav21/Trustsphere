@@ -12,7 +12,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.database.supabase_client import get_supabase
 from app.models.responses import OverviewResponse, DeltaStats, RiskDistributionResponse
 from app.utils.logger import logger
-from app.services.session_service import get_user_by_auth_id
+from app.services.session_service import get_user_by_auth_id, is_token_stale
 
 router = APIRouter()
 security = HTTPBearer()
@@ -30,7 +30,10 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
     user = get_user_by_auth_id(auth_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
+    if is_token_stale(creds.credentials, user):
+        raise HTTPException(status_code=401, detail="Session expired due to a recent password change. Please sign in again.")
+
     return user
 
 router = APIRouter()
@@ -87,7 +90,7 @@ def stats_overview(current_user: dict = Depends(get_current_user)):
             )
             flagged_recovery = len(recovery_req.data) if recovery_req.data else 0
             
-            insider_req = sb.table("audit_log").select("id, event_type").eq("event_type", "INSIDER_THREAT_ALERT").execute()
+            insider_req = sb.table("audit_log").select("id, event_type").eq("event_type", "INSIDER_THREAT_FLAGGED").execute()
             insider_alerts = len(insider_req.data) if insider_req.data else 0
         except Exception as ex:
             logger.warning(f"Failed to fetch new module stats: {ex}")
