@@ -140,16 +140,26 @@ pip install -r requirements.txt
 > short path instead (e.g. `C:\ts-venv`) and point your `uvicorn`/`pip`
 > commands at it.
 
-Create the `onboarding_attempts` table — required for the KYC onboarding
-flow and its analyst review dashboard. This can't be created through the
-app's Supabase client (no DDL over the REST API), so run it once yourself
-in the **Supabase Dashboard → SQL Editor**:
+Create the full schema — every table the backend touches, plus Row Level
+Security locked down on all of them (see **Production Readiness** below
+for why RLS matters even though the backend itself uses the service-role
+key). This can't be done through the app's Supabase client (no DDL over
+the REST API), so run it once yourself in the **Supabase Dashboard → SQL
+Editor**:
 ```bash
-# paste the contents of this file into the SQL Editor and run it:
-backend/scripts/create_onboarding_attempts_table.sql
+# paste the contents of this file into the SQL Editor and run it — it's
+# idempotent, safe to re-run, and supersedes the older
+# create_onboarding_attempts_table.sql / add_password_reset_columns.sql
+# (both still exist for compatibility, but schema.sql is the single
+# source of truth going forward):
+backend/scripts/schema.sql
 ```
 
-*(Optional)* Train the ML model and seed the database:
+Train the ML model and seed the database. The ML model now auto-trains
+itself in-memory on first use if `ml/model.pkl` is missing (see
+`app/services/ml_service.py`), so this first line is a safety net, not a
+strict requirement — but running it explicitly is still recommended so
+the very first login doesn't pay the one-time training cost:
 ```bash
 python ml/train_model.py
 python scripts/seed_supabase.py
@@ -204,6 +214,80 @@ file) that are documented there rather than silently left broken.
 - Document-type/number verification is keyword/regex-based OCR matching,
   not true forgery detection — it catches the wrong document or a made-up
   number, not a well-made fake with correct branding.
+
+---
+
+## Testing
+
+```bash
+cd backend
+pip install -r requirements.txt   # includes pytest
+python -m pytest tests/ -v
+```
+
+This runs **every unit test** (fingerprinting, scoring, onboarding,
+recovery, insider/PAM, network, ML service self-healing, and the
+security-fix regression tests) with zero external dependencies — the
+Supabase/Neo4j/OCR/face-match boundary is mocked throughout, so this
+suite runs in a few seconds and never needs credentials.
+
+It will also print a number of `SKIPPED` results from `tests/integration/`
+— those are **real integration tests** (RLS policy enforcement against
+a live Supabase project, real Neo4j Cypher queries) that skip themselves
+with an explicit reason when no real backing service is configured,
+rather than silently passing. See **[`backend/tests/integration/README.md`](backend/tests/integration/README.md)**
+for exactly how to run them for real, including a one-command local
+Neo4j via `docker-compose.test.yml` that needs no cloud account at all.
+
+**Load/latency measurement** — actually run, not just claimed:
+```bash
+cd backend
+./venv/Scripts/python.exe tests/load_test.py
+```
+Measures the trust-score engine pipeline's real compute latency
+(mocked I/O boundary, isolates algorithm cost) and HTTP-layer throughput
+against your locally running dev server. See the script's own docstring
+for what it does and doesn't measure — it's deliberately honest about
+not being able to include live Supabase/Neo4j network round-trips
+without the integration-test infrastructure above.
+
+---
+
+## Production Readiness
+
+Three things stand between this running as a local demo and running as
+a production deployment. All three now have everything they need
+*written and ready* — what's left is infrastructure only a human with
+real cloud credentials can provision, not something fixable in code:
+
+1. **Real Supabase + Neo4j credentials.** `backend/.env.example` lists
+   every variable needed. Once you have a real project, run
+   `backend/scripts/schema.sql` against it (creates every table with
+   Row Level Security enabled) before anything else.
+
+2. **RLS verification.** `backend/scripts/schema.sql` locks every
+   sensitive table down with real policies — customers see only their
+   own rows, analysts/admins see across all customers, and the most
+   sensitive tables (`otp_sessions`, `system_config`, `flagged_ips`) are
+   deny-all to every client role, service-role only. This matters even
+   though the FastAPI backend itself uses the service-role key (which
+   bypasses RLS) — the frontend's Supabase Realtime subscription
+   (`dashboard.tsx`, used for the "high-risk login" toast) talks to
+   Supabase directly with the anon key, and RLS is what scopes what
+   that subscription can actually see. Run
+   `backend/tests/integration/test_rls_policies.py` against your real
+   project to verify this for real, not just trust the SQL — see that
+   file's docstring for the exact env vars it needs.
+
+3. **Load testing at production scale.** `backend/tests/load_test.py`
+   proves the engine-compute pipeline itself is fast (single-digit
+   milliseconds, well under the architecture doc's "sub-80ms" claim) and
+   that the HTTP stack sustains real concurrent throughput on a dev
+   machine. It does **not** simulate production network latency to a
+   real Supabase/Neo4j region, concurrent-user database contention, or
+   a multi-worker Uvicorn deployment — those need to be measured against
+   whatever real infrastructure you provision, at whatever concurrency
+   you actually expect. Re-run it there before trusting a latency SLA.
 
 ---
 

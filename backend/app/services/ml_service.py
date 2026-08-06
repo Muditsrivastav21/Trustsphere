@@ -11,27 +11,83 @@ import numpy as np
 from app.utils.logger import logger
 
 _model = None
-_MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "ml", "model.pkl")
+_ML_SOURCE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "ml")
+_MODEL_PATH = os.path.join(_ML_SOURCE_DIR, "model.pkl")
+
+
+def _train_and_persist_model():
+    """
+    Train a fresh IsolationForest on synthetic normal/bot data and save it
+    to disk, so a missing model.pkl self-heals on first use instead of
+    silently disabling anomaly detection for the rest of the process
+    lifetime. Mirrors ml/train_model.py exactly (same params/seed) — that
+    script remains the explicit, offline way to (re)train; this is the
+    safety net for whenever someone forgets to run it first.
+    """
+    from sklearn.ensemble import IsolationForest
+
+    # Deliberately anchored to this module's own fixed location (not
+    # _MODEL_PATH) — tests override _MODEL_PATH to a temp directory for
+    # isolation, but synthetic_data.py only ever lives in the real ml/
+    # source directory.
+    import sys
+    sys.path.insert(0, os.path.abspath(_ML_SOURCE_DIR))
+    from synthetic_data import generate_normal_samples  # type: ignore
+
+    normal = generate_normal_samples(n=500, seed=42)
+    model = IsolationForest(
+        n_estimators=100,
+        contamination=0.1,
+        random_state=42,
+        max_samples="auto",
+    )
+    model.fit(normal)
+
+    try:
+        abs_path = os.path.abspath(_MODEL_PATH)
+        os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+        with open(abs_path, "wb") as f:
+            pickle.dump(model, f)
+        logger.info(f"Auto-trained IsolationForest model and saved it to {abs_path}")
+    except Exception as e:
+        # Persisting is best-effort — an unwritable ml/ dir (e.g. read-only
+        # container filesystem) shouldn't stop the model from being usable
+        # for this process's lifetime.
+        logger.warning(f"Trained a fresh model but could not persist it to disk: {e}")
+
+    return model
 
 
 def _load_model():
-    """Lazily load the pickled IsolationForest model."""
+    """
+    Lazily load the pickled IsolationForest model, training and persisting
+    a fresh one automatically if model.pkl doesn't exist yet.
+    """
     global _model
     if _model is not None:
         return _model
 
     abs_path = os.path.abspath(_MODEL_PATH)
     if not os.path.exists(abs_path):
-        logger.warning(f"ML model not found at {abs_path} — anomaly detection disabled")
-        return None
+        logger.warning(f"ML model not found at {abs_path} — auto-training a fresh one now")
+        try:
+            _model = _train_and_persist_model()
+        except Exception as e:
+            logger.error(f"Auto-training the ML model failed: {e} — anomaly detection disabled")
+            _model = None
+        return _model
 
     try:
         with open(abs_path, "rb") as f:
             _model = pickle.load(f)
         logger.info("IsolationForest model loaded successfully")
     except Exception as e:
-        logger.error(f"Failed to load ML model: {e}")
-        _model = None
+        logger.warning(f"Failed to load existing ML model ({e}) — retraining a fresh one")
+        try:
+            _model = _train_and_persist_model()
+        except Exception as e2:
+            logger.error(f"Auto-training the ML model failed: {e2} — anomaly detection disabled")
+            _model = None
     return _model
 
 

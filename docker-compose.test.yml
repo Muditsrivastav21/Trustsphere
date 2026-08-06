@@ -1,0 +1,41 @@
+# TrustSphere AI — Local integration-test infrastructure
+#
+# Spins up a real, disposable Neo4j instance for
+# backend/tests/integration/test_neo4j_integration.py. No cloud account,
+# no AuraDB credentials — this is the actual Neo4j server software
+# running locally, so the Cypher queries under test behave identically
+# to production.
+#
+# Usage:
+#   docker compose -f docker-compose.test.yml up -d
+#   cd backend
+#   NEO4J_URI=bolt://localhost:7687 NEO4J_USERNAME=neo4j NEO4J_PASSWORD=testpassword123 \
+#     ./venv/Scripts/python.exe -m pytest tests/integration/test_neo4j_integration.py -v
+#   docker compose -f docker-compose.test.yml down -v
+#
+# (For Supabase/Postgres + RLS integration testing, use the Supabase CLI's
+# local dev stack instead of this file — see backend/tests/integration/README.md
+# for why that's the correct tool for that specific job, and the exact
+# commands to run it.)
+
+services:
+  neo4j-test:
+    image: neo4j:5-community
+    container_name: trustsphere-neo4j-test
+    ports:
+      - "7687:7687"   # Bolt protocol — what the Python driver connects to
+      - "7474:7474"   # Neo4j Browser (http://localhost:7474) — optional, for eyeballing data
+    environment:
+      NEO4J_AUTH: neo4j/testpassword123
+      NEO4J_dbms_memory_pagecache_size: 256m
+      NEO4J_dbms_memory_heap_max__size: 512m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - trustsphere-neo4j-test-data:/data
+
+volumes:
+  trustsphere-neo4j-test-data:
