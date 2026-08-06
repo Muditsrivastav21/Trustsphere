@@ -16,7 +16,8 @@ type OnboardingRow = {
   name: string;
   email: string;
   phone: string;
-  id_number: string;
+  aadhaar_number: string;
+  pan_number: string;
   device_hash: string;
   risk_score: number;
   decision: "ALLOW" | "MANUAL_REVIEW" | "REJECT";
@@ -130,7 +131,8 @@ function OnboardingPage() {
                     <div className="relative mx-4 -mt-2 mb-4 p-8 bg-[var(--color-page-bg)] backdrop-blur-xl border border-[var(--color-bob-orange)]/20 rounded-b-[24px] rounded-t-lg shadow-[inset_0_10px_20px_rgba(0,0,0,0.05)] dark:shadow-[inset_0_10px_20px_rgba(0,0,0,0.5)] animate-fade-in z-0">
                       <div className="grid md:grid-cols-4 gap-6 relative z-10">
                         <Detail k="Phone Number" v={r.phone} mono/>
-                        <Detail k="National ID" v={r.id_number} mono/>
+                        <Detail k="Aadhaar Number" v={r.aadhaar_number} mono/>
+                        <Detail k="PAN Number" v={r.pan_number} mono/>
                         <Detail k="Device Fingerprint" v={r.device_hash.substring(0,16) + '...'} mono/>
                         <Detail k="Timestamp" v={new Date(r.timestamp).toLocaleString()} mono/>
 

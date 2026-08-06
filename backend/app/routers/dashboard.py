@@ -12,7 +12,7 @@ from app.database.supabase_client import get_supabase
 from app.models.requests import ReviewFreezeRequest
 from app.models.responses import OverviewResponse, DeltaStats, RiskDistributionResponse
 from app.utils.logger import logger
-from app.services.session_service import get_user_by_auth_id
+from app.services.session_service import get_user_by_auth_id, is_token_stale
 
 router = APIRouter()
 security = HTTPBearer()
@@ -30,7 +30,10 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
     user = get_user_by_auth_id(auth_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
+    if is_token_stale(creds.credentials, user):
+        raise HTTPException(status_code=401, detail="Session expired due to a recent password change. Please sign in again.")
+
     return user
 
 router = APIRouter()
@@ -76,10 +79,18 @@ def stats_overview(current_user: dict = Depends(get_current_user)):
             onboarding_req = sb.table("onboarding_attempts").select("id, decision").neq("decision", "APPROVE").execute()
             flagged_onboarding = len(onboarding_req.data) if onboarding_req.data else 0
             
-            recovery_req = sb.table("recovery_attempts").select("id, decision").neq("decision", "ALLOW").execute()
+            # Recovery attempts aren't a separate table — they're written into
+            # login_events with auth_action="RECOVERY_{decision}" (see recovery.py).
+            recovery_req = (
+                sb.table("login_events")
+                .select("id, auth_action")
+                .like("auth_action", "RECOVERY_%")
+                .neq("auth_action", "RECOVERY_ALLOW")
+                .execute()
+            )
             flagged_recovery = len(recovery_req.data) if recovery_req.data else 0
             
-            insider_req = sb.table("audit_logs").select("id, event_type").eq("event_type", "INSIDER_THREAT_ALERT").execute()
+            insider_req = sb.table("audit_log").select("id, event_type").eq("event_type", "INSIDER_THREAT_FLAGGED").execute()
             insider_alerts = len(insider_req.data) if insider_req.data else 0
         except Exception as ex:
             logger.warning(f"Failed to fetch new module stats: {ex}")
@@ -177,7 +188,8 @@ def get_users_list(current_user: dict = Depends(get_current_user)):
         except Exception as ae:
             logger.warning(f"Could not read audit_log for freeze enrichment: {ae}")
 
-        events_res = sb.table("login_events").select("user_id, trust_score, device_hash").execute()
+        # Fetch all login events to compute aggregates
+        events_res = sb.table("login_events").select("user_id, trust_score, device_hash, flags, metadata, timestamp").execute()
         events_data = events_res.data or []
         
         user_events = {}
@@ -199,6 +211,16 @@ def get_users_list(current_user: dict = Depends(get_current_user)):
             if unique_devices == 0:
                 unique_devices = 1
                 
+            # Get latest flags & xai_explanations
+            latest_flags = []
+            xai_explanations = []
+            if sessions_count > 0:
+                sorted_evs = sorted(u_evs, key=lambda x: x.get("timestamp", ""), reverse=True)
+                latest_ev = sorted_evs[0]
+                latest_flags = latest_ev.get("flags") or []
+                metadata = latest_ev.get("metadata") or {}
+                xai_explanations = metadata.get("xai_explanations") or []
+                
             result.append({
                 "db_id": u["id"],
                 "name": u["name"],
@@ -216,6 +238,8 @@ def get_users_list(current_user: dict = Depends(get_current_user)):
                 "freeze_reviewed_at": u.get("freeze_reviewed_at") or f_info.get("freeze_reviewed_at") or "",
                 "freeze_review_notes": u.get("freeze_review_notes") or f_info.get("freeze_review_notes") or "",
                 "freeze_reviewed_by": u.get("freeze_reviewed_by") or f_info.get("freeze_reviewed_by") or "",
+                "latest_flags": latest_flags,
+                "xai_explanations": xai_explanations
             })
             
         return result

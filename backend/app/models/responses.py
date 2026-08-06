@@ -131,9 +131,13 @@ class WeightsInfo(BaseModel):
 
 
 class ThresholdsResponse(BaseModel):
+    # Fallback defaults — used only if the system_config table is unreadable.
+    # Must stay in sync with the live system_config row values and with
+    # scoring_engine.py's _get_thresholds() defaults, or the dashboard could
+    # display thresholds that don't match what's actually being enforced.
     threshold_allow: int = 80
-    threshold_otp: int = 60
-    threshold_block: int = 40
+    threshold_otp: int = 68
+    threshold_block: int = 56
     weights: WeightsInfo = WeightsInfo()
 
 
@@ -184,7 +188,8 @@ class OnboardingAttemptRow(BaseModel):
     name: str
     email: str
     phone: str
-    id_number: str
+    aadhaar_number: str
+    pan_number: str
     device_hash: str
     risk_score: int
     decision: str
@@ -207,4 +212,9 @@ class RecoveryInitResponse(BaseModel):
     decision: str
     risk_score: int
     reason_codes: list[str]
+    message: str
+
+
+class ResetPasswordResponse(BaseModel):
+    success: bool
     message: str

@@ -15,6 +15,9 @@ venv.bak/
 # ML Data
 *.pkl
 
+# Logs
+*.log
+
 # Editor
 .vscode/
 .idea/

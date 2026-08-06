@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { BobLogo } from "@/components/BobLogo";
 import { supabase } from "@/lib/supabase";
@@ -14,9 +14,7 @@ function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [pwd, setPwd] = useState("");
-  const [name, setName] = useState("");
-  const [isRegistering, setIsRegistering] = useState(false);
-  
+
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
   const [error, setError] = useState("");
@@ -171,29 +169,10 @@ function LoginPage() {
     setError("");
 
     try {
-      if (isRegistering) {
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password: pwd,
-          options: { data: { full_name: name } }
-        });
-        if (signUpError) throw signUpError;
-        
-        // Wait briefly for DB triggers
-        await new Promise(r => setTimeout(r, 1000));
-        
-        if (data.session) {
-          await evaluateTrust(data.session.access_token);
-        } else {
-          setError("Registration successful! Check your email to verify.");
-          setLoading(false);
-        }
-      } else {
-        const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password: pwd });
-        if (signInError) throw signInError;
-        if (data.session) {
-          await evaluateTrust(data.session.access_token);
-        }
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({ email, password: pwd });
+      if (signInError) throw signInError;
+      if (data.session) {
+        await evaluateTrust(data.session.access_token);
       }
     } catch (err: any) {
       setError(err.message || "Authentication failed.");
@@ -309,10 +288,10 @@ function LoginPage() {
                 <div className="label-caps text-[var(--color-bob-orange)] tracking-widest">Customer Portal</div>
               </div>
               <h1 className="text-3xl font-extrabold tracking-tight text-[var(--color-text-main)]">
-                {isRegistering ? "Create Account" : "Welcome back"}
+                Welcome back
               </h1>
               <p className="text-sm text-[var(--color-text-sub)] mt-2 leading-relaxed">
-                {isRegistering ? "Register to securely access your digital banking." : "Sign in securely to continue to your account."}
+                Sign in securely to continue to your account.
               </p>
             </div>
 
@@ -354,18 +333,15 @@ function LoginPage() {
               </div>
             ) : (
               <form onSubmit={submit} className="space-y-5 animate-fade-in" onKeyDown={onKeyDown} onKeyUp={onKeyUp}>
-                {isRegistering && (
-                  <div className="group">
-                    <label className="label-caps text-[var(--color-text-secondary)] block mb-2 group-focus-within:text-[var(--color-bob-orange)] transition-colors">Full Name</label>
-                    <input required value={name} onChange={e=>setName(e.target.value)} placeholder="Rahul Sharma" className="w-full px-4 py-3.5 bg-black/20 border border-white/5 rounded-xl text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-bob-orange)] focus:ring-2 focus:ring-[var(--color-bob-orange)]/20 transition-all duration-300 shadow-inner text-white" />
-                  </div>
-                )}
                 <div className="group">
                   <label className="label-caps text-[var(--color-text-secondary)] block mb-2 group-focus-within:text-[var(--color-bob-orange)] transition-colors">Email Address</label>
                   <input type="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="customer@email.com" className="w-full px-4 py-3.5 bg-black/20 border border-white/5 rounded-xl text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-bob-orange)] focus:ring-2 focus:ring-[var(--color-bob-orange)]/20 transition-all duration-300 shadow-inner text-white" />
                 </div>
                 <div className="group">
-                  <label className="label-caps text-[var(--color-text-secondary)] block mb-2 group-focus-within:text-[var(--color-bob-orange)] transition-colors">Password</label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="label-caps text-[var(--color-text-secondary)] group-focus-within:text-[var(--color-bob-orange)] transition-colors">Password</label>
+                    <Link to="/recovery" className="text-xs text-[var(--color-bob-orange)] hover:underline hover:text-white transition-colors font-semibold">Forgot password?</Link>
+                  </div>
                   <input required value={pwd} onChange={e=>setPwd(e.target.value)} type="password" placeholder="••••••••••" className="w-full px-4 py-3.5 bg-black/20 border border-white/5 rounded-xl text-sm placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-bob-orange)] focus:ring-2 focus:ring-[var(--color-bob-orange)]/20 transition-all duration-300 shadow-inner text-white" />
                 </div>
 
@@ -443,15 +419,15 @@ function LoginPage() {
                 )}
 
                 <button type="submit" disabled={loading} className="w-full mt-4 relative overflow-hidden group bg-gradient-to-r from-[var(--color-bob-orange)] to-[var(--color-bob-orange-deep)] text-white font-semibold py-3.5 rounded-xl shadow-[0_4px_14px_rgba(242,101,34,0.4)] hover:shadow-[0_6px_20px_rgba(242,101,34,0.6)] hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-70 disabled:hover:translate-y-0">
-                  <span className="relative z-10 tracking-wide">{isRegistering ? "Register securely" : "Sign In"}</span>
+                  <span className="relative z-10 tracking-wide">Sign In</span>
                   <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
                 </button>
-                
+
                 <div className="text-center pt-2 text-sm text-[var(--color-text-secondary)] font-medium">
-                  {isRegistering ? "Already have an account? " : "Don't have an account? "}
-                  <button type="button" onClick={() => setIsRegistering(!isRegistering)} className="text-[var(--color-bob-orange)] hover:underline hover:text-white transition-colors ml-1 font-semibold">
-                    {isRegistering ? "Sign in" : "Register"}
-                  </button>
+                  Don't have an account?{" "}
+                  <Link to="/signup" className="text-[var(--color-bob-orange)] hover:underline hover:text-white transition-colors ml-1 font-semibold">
+                    Register
+                  </Link>
                 </div>
               </form>
             )}

@@ -16,7 +16,7 @@ from app.models.responses import (
     ThresholdsResponse, WeightsInfo,
     AuditLogResponse, AuditEntry,
 )
-from app.services.session_service import create_audit_log, get_user_by_auth_id
+from app.services.session_service import create_audit_log, get_user_by_auth_id, is_token_stale
 from app.utils.logger import logger
 
 router = APIRouter()
@@ -35,7 +35,10 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
     user = get_user_by_auth_id(auth_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
+    if is_token_stale(creds.credentials, user):
+        raise HTTPException(status_code=401, detail="Session expired due to a recent password change. Please sign in again.")
+
     return user
 
 
@@ -55,8 +58,8 @@ def get_thresholds():
 
     return ThresholdsResponse(
         threshold_allow=int(config.get("threshold_allow", "80")),
-        threshold_otp=int(config.get("threshold_otp", "60")),
-        threshold_block=int(config.get("threshold_block", "40")),
+        threshold_otp=int(config.get("threshold_otp", "68")),
+        threshold_block=int(config.get("threshold_block", "56")),
         weights=WeightsInfo(
             device=float(config.get("weight_device", "0.40")),
             behavior=float(config.get("weight_behavior", "0.35")),

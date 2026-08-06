@@ -158,10 +158,53 @@ def verify_otp(session_id: str, otp_code: str) -> tuple[bool, str]:
         if datetime.now(timezone.utc) > expires_at:
             return (False, "OTP has expired. Please request a new one.")
 
-        # Mark used
-        sb.table("otp_sessions").update({"used": True}).eq("session_id", session_id).execute()
+        # Mark used, and stamp verified_at — used by the recovery flow's
+        # reset-password endpoint to enforce a short window between OTP
+        # verification and actually resetting the password (see
+        # recovery.py). Harmless bookkeeping for the plain login-OTP path.
+        sb.table("otp_sessions").update({
+            "used": True,
+            "verified_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("session_id", session_id).execute()
         return (True, "Identity confirmed. Proceed to banking.")
 
     except Exception as e:
         logger.error(f"OTP verification error: {e}")
         return (False, "Verification failed due to a server error.")
+
+
+def send_password_changed_email(to_email: str) -> None:
+    """
+    Send a "your password was changed" notification via Gmail SMTP.
+    Deliberately a separate function from send_email_otp — this is a
+    post-fact security notification, not a code the user needs to act on,
+    and should never be confused with (or accidentally reuse) the OTP
+    template.
+    """
+    sender = settings.GMAIL_SENDER
+    password = settings.GMAIL_APP_PASSWORD
+
+    if not sender or not password:
+        logger.warning("Email credentials missing. Not sending password-changed notification.")
+        return
+
+    msg = MIMEMultipart()
+    msg['From'] = f"TrustSphere AI <{sender}>"
+    msg['To'] = to_email
+    msg['Subject'] = "Bank of Baroda - Your password was changed"
+
+    body = """
+    <h2>Bank of Baroda Security Alert</h2>
+    <p>Your account password was just changed via the account recovery flow.</p>
+    <p>If this was you, no further action is needed.</p>
+    <p style="color: #E8384F; font-weight: bold;">If you did not make this change, please contact support immediately — your account may be compromised.</p>
+    """
+    msg.attach(MIMEText(body, 'html'))
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=5.0) as server:
+            server.login(sender, password)
+            server.send_message(msg)
+            logger.info(f"Password-changed notification sent to {to_email}")
+    except Exception as e:
+        logger.error(f"Failed to send password-changed notification: {e}")

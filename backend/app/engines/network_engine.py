@@ -85,7 +85,19 @@ async def evaluate_network(ip_address: str, user_id: str) -> dict:
                     logger.warning(f"Impossible travel check failed: {e}")
 
     # 4. Geolocation check
-    if country != "IN":
+    # --- Fetch user's home country ---
+    user_home_country = "IN"
+    try:
+        from app.database.supabase_client import get_supabase
+        sb = get_supabase()
+        res = sb.table("users").select("home_country").eq("id", user_id).execute()
+        if res.data and len(res.data) > 0 and res.data[0].get("home_country"):
+            user_home_country = res.data[0]["home_country"]
+    except Exception as e:
+        logger.warning(f"Failed to fetch home_country: {e}")
+
+    # Hackathon note: Fallback to IN for brand-new users with no baseline yet
+    if country != user_home_country:
         score -= 30
         flags.append("FOREIGN_IP")
 

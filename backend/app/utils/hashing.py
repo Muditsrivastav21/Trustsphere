@@ -19,3 +19,8 @@ def generate_fingerprint_hash(
     """
     raw = f"{user_agent}|{timezone}|{screen_res}|{language}|{platform}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def hash_string(value: str) -> str:
+    """Produce a SHA-256 hex digest of an arbitrary string (e.g. a government ID)."""
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()

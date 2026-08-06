@@ -21,7 +21,7 @@ from app.engines.scoring_engine import calculate_trust_score
 from app.services.session_service import (
     create_login_event, create_behavioral_metrics,
     upsert_device_fingerprint, create_audit_log, get_user_by_auth_id,
-    get_or_create_user_profile, get_login_event_by_session,
+    get_or_create_user_profile, get_login_event_by_session, is_token_stale,
 )
 from app.services.graph_service import write_login_to_graph
 from app.services.otp_service import generate_otp, store_otp, verify_otp, send_email_otp, send_security_alert_email
@@ -47,7 +47,9 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
     user = get_user_by_auth_id(auth_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+    if is_token_stale(creds.credentials, user):
+        raise HTTPException(status_code=401, detail="Session expired due to a recent password change. Please sign in again.")
+
     if user.get("risk_profile") == "FROZEN":
         raise HTTPException(
             status_code=403,
@@ -196,6 +198,21 @@ async def login(request: Request, req: LoginRequest, background_tasks: Backgroun
 
     location = network_result["location"]
 
+    # 8.5 Set home region baseline if not set yet
+    if not user.get("home_country") or not user.get("home_timezone"):
+        home_country = location.get("country") or "IN"
+        home_tz = device_dict.get("timezone") or "Asia/Kolkata"
+        try:
+            from app.services.session_service import update_user_home_region
+            background_tasks.add_task(
+                update_user_home_region,
+                user_id,
+                home_country,
+                home_tz
+            )
+        except Exception as e:
+            logger.warning(f"Failed to schedule home region update: {e}")
+
     # 9. INSERT login_events (triggers Supabase Realtime)
     try:
         await run_in_threadpool(create_login_event, {
@@ -334,7 +351,8 @@ async def login(request: Request, req: LoginRequest, background_tasks: Backgroun
 
 
 @router.post("/verify-otp", response_model=OtpVerifyResponse)
-def verify_otp_endpoint(req: VerifyOtpRequest):
+@limiter.limit("3/minute")
+def verify_otp_endpoint(request: Request, req: VerifyOtpRequest):
     """Verify a 6-digit OTP for a given session."""
     login_event = get_login_event_by_session(req.session_id)
     if login_event and login_event.get("user_id"):
