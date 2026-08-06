@@ -123,6 +123,21 @@ async def login(request: Request, req: LoginRequest, background_tasks: Backgroun
 
     location = network_result["location"]
 
+    # 8.5 Set home region baseline if not set yet
+    if not user.get("home_country") or not user.get("home_timezone"):
+        home_country = location.get("country") or "IN"
+        home_tz = device_dict.get("timezone") or "Asia/Kolkata"
+        try:
+            from app.services.session_service import update_user_home_region
+            background_tasks.add_task(
+                update_user_home_region,
+                user_id,
+                home_country,
+                home_tz
+            )
+        except Exception as e:
+            logger.warning(f"Failed to schedule home region update: {e}")
+
     # 9. INSERT login_events (triggers Supabase Realtime)
     try:
         await run_in_threadpool(create_login_event, {
@@ -261,7 +276,8 @@ async def login(request: Request, req: LoginRequest, background_tasks: Backgroun
 
 
 @router.post("/verify-otp", response_model=OtpVerifyResponse)
-def verify_otp_endpoint(req: VerifyOtpRequest):
+@limiter.limit("3/minute")
+def verify_otp_endpoint(request: Request, req: VerifyOtpRequest):
     """Verify a 6-digit OTP for a given session."""
     verified, message = verify_otp(req.session_id, req.otp_code)
     if verified:

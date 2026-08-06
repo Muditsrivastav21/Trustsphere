@@ -44,11 +44,15 @@ class OnboardingRequest(BaseModel):
     email: str
     phone: str
     dob: str
-    id_number: str
+    aadhaar_number: str
+    pan_number: str
     password: str = ""
     ip_address: str = "127.0.0.1"
     device: DeviceSignals = Field(default_factory=DeviceSignals)
     behavior: BehaviorSignals = Field(default_factory=BehaviorSignals)
+    reference_image: str | None = None
+    aadhaar_image: str | None = None
+    pan_image: str | None = None
 
 
 class VerifyOtpRequest(BaseModel):

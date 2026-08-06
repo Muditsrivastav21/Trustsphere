@@ -14,69 +14,132 @@ export function ContinuousTrustProvider({ children }: { children: React.ReactNod
   const { role } = useAuth();
   const [otp, setOtp] = useState("");
 
-  const lastMousePos = useRef<{x: number, y: number, t: number} | null>(null);
-  const penaltyPoints = useRef(0);
+  const resultStr = typeof window !== "undefined" ? sessionStorage.getItem("trustsphere_result") : null;
+  const result = resultStr ? JSON.parse(resultStr) : null;
+  const sessionId = result?.session_id;
+
+  const keyHoldTimesRef = useRef<number[]>([]);
+  const flightTimesRef = useRef<number[]>([]);
+  const mouseSpeedsRef = useRef<number[]>([]);
+  const keystrokeCountRef = useRef(0);
+  const mouseEventCountRef = useRef(0);
+  const lastKeyDownRef = useRef<number>(0);
+  const lastKeyUpRef = useRef<number>(0);
+  const lastMouseRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const typingStartRef = useRef<number>(0);
+
+  const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8001";
+
+  const computeWpm = () => {
+    const elapsed = (Date.now() - typingStartRef.current) / 1000 / 60;
+    if (elapsed <= 0) return 0;
+    return Math.round((keystrokeCountRef.current / 5) / elapsed);
+  };
 
   useEffect(() => {
-    if (isLocked) return;
+    if (isLocked || !sessionId) return;
 
     const handleMouseMove = (e: MouseEvent) => {
+      mouseEventCountRef.current++;
       const now = Date.now();
-      if (lastMousePos.current) {
-        const dx = e.clientX - lastMousePos.current.x;
-        const dy = e.clientY - lastMousePos.current.y;
-        const dt = now - lastMousePos.current.t;
-        
-        if (dt > 0) {
-          const speed = Math.sqrt(dx*dx + dy*dy) / dt;
-          // Extremely erratic mouse speed (scaled up to prevent false positives for normal users)
-          if (speed > 18) {
-            penaltyPoints.current += 1;
-          }
-        }
+      const prev = lastMouseRef.current;
+      if (prev && now - prev.t > 0) {
+        const dist = Math.sqrt(Math.pow(e.clientX - prev.x, 2) + Math.pow(e.clientY - prev.y, 2));
+        mouseSpeedsRef.current.push(dist / ((now - prev.t) / 1000));
       }
-      lastMousePos.current = { x: e.clientX, y: e.clientY, t: now };
+      lastMouseRef.current = { x: e.clientX, y: e.clientY, t: now };
     };
 
-    let lastKeyTime = 0;
     const handleKeyDown = (e: KeyboardEvent) => {
-      const now = Date.now();
-      // Only penalize non-human rapid keystrokes (e.g. bot scripts typing < 30ms apart)
-      if (lastKeyTime && now - lastKeyTime < 30) {
-        penaltyPoints.current += 1;
-      }
-      lastKeyTime = now;
+      if (typingStartRef.current === 0) typingStartRef.current = Date.now();
+      lastKeyDownRef.current = Date.now();
+      if (lastKeyUpRef.current > 0) flightTimesRef.current.push(Date.now() - lastKeyUpRef.current);
+    };
+
+    const handleKeyUp = () => {
+      keystrokeCountRef.current++;
+      if (lastKeyDownRef.current > 0) keyHoldTimesRef.current.push(Date.now() - lastKeyDownRef.current);
+      lastKeyUpRef.current = Date.now();
     };
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
 
-    const interval = setInterval(() => {
-      if (penaltyPoints.current > 0) {
-        setTrustScore(prev => {
-          const newScore = Math.max(0, prev - penaltyPoints.current);
-          if (newScore < 40) setIsLocked(true);
-          return newScore;
+    const interval = setInterval(async () => {
+      const payload = {
+        session_id: sessionId,
+        behavior: {
+          key_hold_times: keyHoldTimesRef.current.slice(0, 50),
+          flight_times: flightTimesRef.current.slice(0, 50),
+          typing_speed_wpm: computeWpm(),
+          mouse_speeds: mouseSpeedsRef.current.slice(0, 50),
+          mouse_event_count: mouseEventCountRef.current,
+          total_keystrokes: keystrokeCountRef.current,
+        },
+      };
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/auth/continuous`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
         });
-        penaltyPoints.current = 0; // Reset penalty accumulator
-      } else {
-        // Slowly recover trust
-        setTrustScore(prev => Math.min(100, prev + 1));
+
+        if (resp.ok) {
+          const data = await resp.json();
+          setTrustScore(data.score);
+          if (data.status === "BLOCK") {
+            setIsLocked(true);
+          } else if (data.status === "SUSPICIOUS") {
+            console.warn("Suspicious activity detected, trust score dropped.");
+          }
+        }
+      } catch (e) {
+        // Handle network failures gracefully without locking out the user
+        console.warn("Continuous auth poll failed, retaining last state", e);
       }
-    }, 1000);
+
+      // Reset buffers for next window
+      keyHoldTimesRef.current = [];
+      flightTimesRef.current = [];
+      mouseSpeedsRef.current = [];
+      mouseEventCountRef.current = 0;
+      keystrokeCountRef.current = 0;
+      typingStartRef.current = 0;
+
+    }, 5000);
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
       clearInterval(interval);
     };
-  }, [isLocked]);
+  }, [isLocked, sessionId]);
 
-  const resetTrust = () => {
-    setTrustScore(100);
-    setIsLocked(false);
-    setOtp("");
-    penaltyPoints.current = 0;
+  const resetTrust = async () => {
+    try {
+      const resp = await fetch(`${API_BASE}/api/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, otp_code: otp })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.verified) {
+          setTrustScore(100);
+          setIsLocked(false);
+          setOtp("");
+        } else {
+          alert("Invalid OTP");
+        }
+      } else {
+        alert("Verification failed");
+      }
+    } catch (e) {
+      alert("Verification request failed");
+    }
   };
 
   return (

@@ -28,3 +28,10 @@ TrustSphere is designed natively to satisfy core requirements of financial regul
 
 ## Explainability (XAI) & Auditability
 TrustSphere does not operate as a "black box." Every decision (Allow, Step-Up, Block) is backed by explicit **Reason Codes** and human-readable **XAI Explanations**. Furthermore, the **Audit Log** tracks every configuration change and insider threat alert immutably. This guarantees that bank auditors and regulators can retrace the exact logic behind any access decision, fulfilling stringent explainability requirements.
+
+## Data Privacy & Retention
+TrustSphere incorporates Privacy-by-Design principles to minimize data exposure:
+- **Device Fingerprints**: Only cryptographic hashes are retained. Raw Canvas, WebGL, and Audio API payloads are never stored. A 90-day inactivity retention policy is targeted for device hashes.
+- **Network Signals**: IP addresses are evaluated for geolocation and ASN properties but are not persistently mapped to identities beyond standard 30-day audit logging limits.
+- **Behavioral Biometrics**: The engine strictly records timing intervals (keystroke flight/hold times) and mouse-movement telemetry. **Actual typed characters are never captured or stored.**
+- **ML Training**: The model will continuously retrain exclusively on consented, anonymized behavioral metadata logs using these same privacy-safe timing features.
