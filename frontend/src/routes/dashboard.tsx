@@ -3,6 +3,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ContinuousTrustProvider } from "@/contexts/ContinuousTrustProvider";
 
@@ -51,14 +52,9 @@ function DashboardLayout() {
 
   if (isLoading || !user) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-page-bg)]">
-        <div className="relative flex items-center justify-center mb-4">
-          <div className="absolute inset-0 bg-[var(--color-bob-orange)] rounded-full blur-xl opacity-20 animate-pulse"></div>
-          <svg className="w-12 h-12 animate-pulse-shield text-[var(--color-bob-orange)] relative z-10" viewBox="0 0 140 160" fill="none">
-            <path d="M70 8 L130 30 L130 80 C130 115 105 140 70 152 C35 140 10 115 10 80 L10 30 Z" stroke="currentColor" strokeWidth="4" fill="rgba(242,101,34,0.1)"/>
-          </svg>
-        </div>
-        <div className="text-[var(--color-text-sub)] text-sm font-medium animate-pulse">Verifying access...</div>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-[var(--color-page-bg)]">
+        <Loader2 size={20} strokeWidth={2} className="animate-spin text-[var(--color-accent-brand)]" />
+        <div className="text-[13px] font-medium text-[var(--color-text-sub)]">Verifying access…</div>
       </div>
     );
   }

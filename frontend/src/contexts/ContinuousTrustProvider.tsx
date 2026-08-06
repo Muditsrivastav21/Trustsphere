@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from "react";
 import { useAuth } from "./AuthContext";
+import { ShieldAlert, Mail } from "lucide-react";
 
 interface ContinuousTrustContextType {
   trustScore: number;
@@ -98,18 +99,15 @@ export function ContinuousTrustProvider({ children }: { children: React.ReactNod
           }
         }
       } catch (e) {
-        // Handle network failures gracefully without locking out the user
         console.warn("Continuous auth poll failed, retaining last state", e);
       }
 
-      // Reset buffers for next window
       keyHoldTimesRef.current = [];
       flightTimesRef.current = [];
       mouseSpeedsRef.current = [];
       mouseEventCountRef.current = 0;
       keystrokeCountRef.current = 0;
       typingStartRef.current = 0;
-
     }, 5000);
 
     return () => {
@@ -135,84 +133,83 @@ export function ContinuousTrustProvider({ children }: { children: React.ReactNod
           setOtp("");
           setDemoOtp(null);
         } else {
-          alert("Invalid OTP");
+          alert("Invalid code. Please try again.");
         }
       } else {
-        alert("Verification failed");
+        alert("Verification failed.");
       }
     } catch (e) {
-      alert("Verification request failed");
+      alert("Verification request failed.");
     }
   };
 
   return (
     <ContinuousTrustContext.Provider value={{ trustScore, resetTrust }}>
       {children}
-      
+
       {isLocked && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-2xl animate-fade-in">
-          {/* Ominous red glow */}
-          <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-danger)]/10 to-transparent pointer-events-none"></div>
-          
-          <div className="bg-[var(--color-panel-bg)] border border-[var(--color-danger)]/30 rounded-[32px] p-10 max-w-lg w-full shadow-[0_20px_60px_rgba(232,56,79,0.2)] relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-[var(--color-danger)]/5 rounded-full blur-[80px] pointer-events-none -translate-y-1/2 translate-x-1/2"></div>
-            
-            <div className="flex flex-col items-center text-center relative z-10">
-              <div className="w-20 h-20 bg-[var(--color-danger)]/10 rounded-3xl flex items-center justify-center border border-[var(--color-danger)]/30 mb-6 shadow-[0_0_30px_rgba(232,56,79,0.2)] animate-pulse-shield">
-                <svg className="w-10 h-10 text-[var(--color-danger)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="lock-title"
+          aria-describedby="lock-desc"
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4 animate-fade-in"
+        >
+          <div className="surface-card elevated max-w-[420px] w-full p-7">
+            <div className="flex flex-col items-center text-center">
+              <div className="w-11 h-11 rounded-full flex items-center justify-center mb-4" style={{ background: "var(--color-danger-bg)", border: "1px solid var(--color-danger-border)" }}>
+                <ShieldAlert size={20} strokeWidth={2} style={{ color: "var(--color-danger)" }} />
               </div>
-              
-              <h2 className="text-3xl font-extrabold text-[var(--color-text-main)] tracking-tight mb-2">Session Hijack Detected</h2>
-              <p className="text-[var(--color-text-sub)] text-sm leading-relaxed mb-8">
-                Anomalous behavioral patterns (erratic mouse velocity & keystrokes) have caused your Trust Score to drop to <span className="font-bold text-[var(--color-danger)]">{Math.round(trustScore)}%</span>. 
-                <br/><br/>Continuous Validation has locked this session.
+
+              <h2 id="lock-title" className="text-[18px] font-semibold text-[var(--color-text-main)] mb-1.5">Session locked</h2>
+              <p id="lock-desc" className="text-[13.5px] text-[var(--color-text-sub)] leading-relaxed mb-6">
+                Unusual behavioral patterns dropped your trust score to <span className="font-semibold text-[var(--color-danger)]">{Math.round(trustScore)}</span>. Continuous validation has locked this session pending re-verification.
               </p>
-              
+
               <div className="w-full">
-                <div className="text-[10px] uppercase tracking-[0.2em] font-bold text-[var(--color-text-dim)] mb-3 text-left">Step-Up Authentication Required</div>
-                <div className="flex gap-3 mb-6">
-                  {[1, 2, 3, 4, 5, 6].map((i, idx) => (
-                    <input 
-                      key={i} 
-                      type="text" 
-                      maxLength={1} 
+                <div className="label-caps text-[var(--color-text-dim)] mb-2.5 text-left">Enter verification code</div>
+                <div className="flex gap-2 mb-4 justify-center">
+                  {[0, 1, 2, 3, 4, 5].map((idx) => (
+                    <input
+                      key={idx}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
                       value={otp[idx] || ""}
                       onChange={(e) => {
-                        const val = e.target.value;
+                        const val = e.target.value.replace(/\D/g, "");
                         setOtp(prev => {
-                          const arr = prev.split("");
-                          arr[idx] = val;
-                          return arr.join("");
+                          const arr = prev.padEnd(6, " ").split("");
+                          arr[idx] = val || " ";
+                          return arr.join("").trimEnd();
                         });
                         if (val && e.target.nextElementSibling) {
                           (e.target.nextElementSibling as HTMLInputElement).focus();
                         }
                       }}
-                      className="w-12 h-14 bg-[var(--color-glass-bg)] border border-[var(--color-glass-border)] rounded-xl text-center text-xl font-mono text-[var(--color-text-main)] focus:border-[var(--color-danger)] focus:bg-[var(--color-glass-hover)] transition-all outline-none"
+                      aria-label={`Digit ${idx + 1} of 6`}
+                      className="input-field w-11 h-12 text-center font-mono text-[18px]"
                     />
                   ))}
                 </div>
-                
+
                 <button
-                  onClick={() => {
-                    if (otp.length === 6) resetTrust();
-                  }}
-                  className="w-full py-4 bg-gradient-to-r from-[var(--color-danger)] to-red-600 rounded-xl font-bold tracking-widest text-sm uppercase text-white shadow-[0_4px_20px_rgba(232,56,79,0.3)] hover:shadow-[0_4px_30px_rgba(232,56,79,0.5)] transition-all disabled:opacity-50"
+                  onClick={() => { if (otp.length === 6) resetTrust(); }}
                   disabled={otp.length !== 6}
+                  className="w-full h-9 rounded-md text-[13.5px] font-medium text-white transition-colors duration-120 disabled:opacity-50"
+                  style={{ background: "var(--color-danger)" }}
                 >
-                  Verify Identity
+                  Verify identity
                 </button>
 
                 {demoOtp ? (
-                  <div className="text-[12px] text-[var(--color-danger)] mt-5 text-center font-mono font-bold uppercase tracking-widest bg-[var(--color-danger)]/10 py-2.5 rounded-lg border border-[var(--color-danger)]/20 shadow-sm">
-                    Demo Mode OTP: {demoOtp}
+                  <div className="text-[12px] mt-4 text-center font-mono font-medium py-2 rounded-md" style={{ background: "var(--color-danger-bg)", color: "var(--color-danger)", border: "1px solid var(--color-danger-border)" }}>
+                    Demo mode code: {demoOtp}
                   </div>
                 ) : (
-                  <div className="text-[12px] text-[var(--color-text-dim)] mt-5 text-center font-mono uppercase tracking-widest bg-white/5 py-2.5 px-4 rounded-lg border border-white/10 flex items-center justify-center gap-2">
-                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 002-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                    <span>OTP sent to your registered email address</span>
+                  <div className="text-[12px] text-[var(--color-text-dim)] mt-4 text-center flex items-center justify-center gap-1.5">
+                    <Mail size={13} strokeWidth={1.75} />
+                    <span>Code sent to your registered email address</span>
                   </div>
                 )}
               </div>
