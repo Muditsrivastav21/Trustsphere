@@ -1,5 +1,5 @@
 """
-TrustSphere AI — Pydantic Request Models
+TrustSphere AI - Pydantic Request Models
 Defines the shape of incoming POST bodies from the frontend.
 """
 
@@ -57,6 +57,11 @@ class VerifyOtpRequest(BaseModel):
     otp_code: str
 
 
+class ResendOtpRequest(BaseModel):
+    """POST /api/auth/resend-otp body."""
+    session_id: str
+
+
 class ContinuousAuthRequest(BaseModel):
     """POST /api/auth/continuous body."""
     session_id: str
@@ -88,3 +93,21 @@ class ThresholdsUpdateRequest(BaseModel):
     weight_device: Optional[float] = None
     weight_behavior: Optional[float] = None
     weight_network: Optional[float] = None
+
+
+class FreezeAccountRequest(BaseModel):
+    """POST /api/auth/freeze body."""
+    reason: str = Field(..., min_length=3, description="User provided reason for freezing account")
+
+
+class ReviewFreezeRequest(BaseModel):
+    """POST /api/stats/freeze-requests/{user_id}/review body."""
+    action: str = Field(..., pattern="^(APPROVE|REJECT)$")
+    review_notes: Optional[str] = ""
+
+
+class SecurityRulesUpdateRequest(BaseModel):
+    """POST /api/auth/security-rules body."""
+    reqOtpOutsideInd: bool = False      # Force OTP when IP country != India
+    pushNightLogin: bool = False        # Send alert email for 12AM-6AM IST logins
+    lockUnrecognized: bool = True       # Block login from unrecognized devices

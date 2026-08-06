@@ -39,8 +39,11 @@ function LoginPage() {
     signalTimeoutRef.current = window.setTimeout(() => setActiveSignal(false), 300);
   };
 
-  // Handle Google OAuth Redirect
+  // Handle Google OAuth Redirect & Frozen Query Param
   useEffect(() => {
+    if (window.location.search.includes('frozen=true')) {
+      setError("Your account has been frozen for security reasons. Login is disabled until your request is reviewed and approved by a security analyst.");
+    }
     if (window.location.search.includes('googleCallback=true')) {
       setLoading(true);
       supabase.auth.getSession().then(({ data: { session } }) => {
@@ -148,7 +151,13 @@ function LoginPage() {
       body: JSON.stringify(payload),
     });
 
-    if (!resp.ok) throw new Error("Trust evaluation failed");
+    if (!resp.ok) {
+      if (resp.status === 403) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Your account has been frozen for security reasons. Login is disabled until your request is reviewed and approved by a security analyst.");
+      }
+      throw new Error("Trust evaluation failed");
+    }
     const result = await resp.json();
     
     sessionStorage.setItem("trustsphere_result", JSON.stringify(result));
@@ -405,7 +414,33 @@ function LoginPage() {
                   </div>
                 </div>
 
-                {error && <div className="text-sm text-[var(--color-danger)] bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/30 rounded-lg px-4 py-3 animate-fade-in-up flex items-center gap-2 font-medium"><svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>{error}</div>}
+                {error && (
+                  error.toLowerCase().includes("frozen") || error.toLowerCase().includes("security reasons") ? (
+                    <div className="bg-red-500/10 border-2 border-red-500/40 rounded-2xl p-5 text-red-300 animate-fade-in-up space-y-3 shadow-[0_0_25px_rgba(239,68,68,0.2)]">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center text-red-400 shrink-0">
+                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="font-mono text-[10px] uppercase tracking-widest text-red-400 font-bold">Account Locked / Frozen</div>
+                          <div className="font-extrabold text-white text-sm">Security Notice</div>
+                        </div>
+                      </div>
+                      <p className="text-xs leading-relaxed text-red-200/90 font-mono bg-black/40 p-3 rounded-xl border border-red-500/20">
+                        {error}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-[var(--color-danger)] bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/30 rounded-lg px-4 py-3 animate-fade-in-up flex items-center gap-2 font-medium">
+                      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      {error}
+                    </div>
+                  )
+                )}
 
                 <button type="submit" disabled={loading} className="w-full mt-4 relative overflow-hidden group bg-gradient-to-r from-[var(--color-bob-orange)] to-[var(--color-bob-orange-deep)] text-white font-semibold py-3.5 rounded-xl shadow-[0_4px_14px_rgba(242,101,34,0.4)] hover:shadow-[0_6px_20px_rgba(242,101,34,0.6)] hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-70 disabled:hover:translate-y-0">
                   <span className="relative z-10 tracking-wide">{isRegistering ? "Register securely" : "Sign In"}</span>

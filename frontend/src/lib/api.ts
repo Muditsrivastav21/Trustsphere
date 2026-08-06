@@ -8,5 +8,18 @@ export async function apiFetch(input: string | URL | globalThis.Request, init?: 
     headers.set("Authorization", `Bearer ${session.access_token}`);
   }
 
-  return fetch(input, { ...init, headers });
+  const res = await fetch(input, { ...init, headers });
+  if (res.status === 403) {
+    const clone = res.clone();
+    try {
+      const data = await clone.json();
+      if (data?.detail && (data.detail.toLowerCase().includes("frozen") || data.detail.toLowerCase().includes("security reasons"))) {
+        await supabase.auth.signOut();
+        if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
+          window.location.href = "/login?frozen=true";
+        }
+      }
+    } catch {}
+  }
+  return res;
 }

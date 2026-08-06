@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.concurrency import run_in_threadpool
 
-from app.models.requests import LoginRequest, VerifyOtpRequest, ContinuousAuthRequest
+from app.models.requests import LoginRequest, VerifyOtpRequest, ContinuousAuthRequest, ResendOtpRequest, FreezeAccountRequest, SecurityRulesUpdateRequest
 from app.models.responses import (
     LoginResponse, UserInfo, LocationInfo, ComponentScores, OtpVerifyResponse,
 )
@@ -21,10 +21,10 @@ from app.engines.scoring_engine import calculate_trust_score
 from app.services.session_service import (
     create_login_event, create_behavioral_metrics,
     upsert_device_fingerprint, create_audit_log, get_user_by_auth_id,
-    get_or_create_user_profile,
+    get_or_create_user_profile, get_login_event_by_session,
 )
 from app.services.graph_service import write_login_to_graph
-from app.services.otp_service import generate_otp, store_otp, verify_otp, send_email_otp
+from app.services.otp_service import generate_otp, store_otp, verify_otp, send_email_otp, send_security_alert_email
 from app.utils.session_id import generate_session_id
 from app.utils.logger import logger
 from app.utils.rate_limiter import limiter
@@ -48,6 +48,12 @@ def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    if user.get("risk_profile") == "FROZEN":
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been frozen for security reasons. Login is disabled until your request is reviewed and approved by a security analyst."
+        )
+
     return user
 
 @router.get("/me")
@@ -77,6 +83,12 @@ async def login(request: Request, req: LoginRequest, background_tasks: Backgroun
     if not user:
         raise HTTPException(status_code=500, detail="Could not resolve or create user profile.")
 
+    if user.get("risk_profile") == "FROZEN":
+        raise HTTPException(
+            status_code=403,
+            detail="Your account has been frozen for security reasons. Login is disabled until your request is reviewed and approved by a security analyst."
+        )
+
     user_id = user["id"]
     req.customer_id = user["customer_id"]
 
@@ -104,6 +116,67 @@ async def login(request: Request, req: LoginRequest, background_tasks: Backgroun
     # Bypass OTP for analyst users
     if user.get("role") == "analyst" and score_result["auth_action"] == "OTP":
         score_result["auth_action"] = "ALLOW"
+
+    # --- CUSTOM SECURITY RULES ENFORCEMENT ---
+    # Load user's security rules from DB
+    user_security_rules: dict = {}
+    try:
+        rules_res = await run_in_threadpool(
+            lambda: sb.table("users").select("security_rules").eq("id", user_id).limit(1).execute()
+        )
+        if rules_res.data:
+            user_security_rules = rules_res.data[0].get("security_rules") or {}
+    except Exception:
+        pass  # If column doesn't exist yet, skip rules silently
+
+    country_code = (network_result["location"].get("country") or "").upper()
+    login_time_utc = datetime.now(timezone.utc)
+    # IST = UTC + 5h30m
+    login_hour_ist = (login_time_utc.hour + 5) % 24 + (1 if login_time_utc.minute >= 30 else 0)
+    login_hour_ist = login_hour_ist % 24
+    user_email_for_rules = (user.get("email") or "").strip().lower()
+
+    # Rule 1: OTP required outside India
+    if user_security_rules.get("reqOtpOutsideInd") and country_code not in ("", "IN", "UNKNOWN"):
+        if score_result["auth_action"] == "ALLOW":  # only escalate, never downgrade
+            score_result["auth_action"] = "OTP"
+        if "GEOFENCE_OTP_REQUIRED" not in all_flags:
+            all_flags.append("GEOFENCE_OTP_REQUIRED")
+        # Send a foreign login alert email asynchronously
+        if user_email_for_rules:
+            background_tasks.add_task(
+                send_security_alert_email,
+                user_email_for_rules,
+                "FOREIGN_LOGIN",
+                {
+                    "country": network_result["location"].get("country", "Unknown"),
+                    "ip": req.ip_address,
+                    "time": login_time_utc.strftime("%Y-%m-%d %H:%M UTC"),
+                }
+            )
+
+    # Rule 2: Night login alert (12AM–6AM IST)
+    if user_security_rules.get("pushNightLogin") and 0 <= login_hour_ist < 6:
+        if "NIGHT_LOGIN_ALERT_SENT" not in all_flags:
+            all_flags.append("NIGHT_LOGIN_ALERT_SENT")
+        if user_email_for_rules:
+            background_tasks.add_task(
+                send_security_alert_email,
+                user_email_for_rules,
+                "NIGHT_LOGIN",
+                {
+                    "time": login_time_utc.strftime("%Y-%m-%d %H:%M UTC") + f" ({login_hour_ist:02d}:XX IST)",
+                    "location": network_result["location"].get("city", "") + ", " + network_result["location"].get("country", ""),
+                    "device": req.device.user_agent[:80] if req.device.user_agent else "Unknown",
+                }
+            )
+
+    # Rule 3: Block login on unrecognized device
+    if user_security_rules.get("lockUnrecognized") and not device_result["is_known_device"]:
+        score_result["auth_action"] = "BLOCK"
+        if "UNRECOGNIZED_DEVICE_BLOCKED" not in all_flags:
+            all_flags.append("UNRECOGNIZED_DEVICE_BLOCKED")
+    # --- END CUSTOM SECURITY RULES ---
 
     # 7. Generate session ID
     session_id = generate_session_id()
@@ -263,6 +336,15 @@ async def login(request: Request, req: LoginRequest, background_tasks: Backgroun
 @router.post("/verify-otp", response_model=OtpVerifyResponse)
 def verify_otp_endpoint(req: VerifyOtpRequest):
     """Verify a 6-digit OTP for a given session."""
+    login_event = get_login_event_by_session(req.session_id)
+    if login_event and login_event.get("user_id"):
+        sb = get_supabase()
+        user_res = sb.table("users").select("risk_profile").eq("id", login_event["user_id"]).limit(1).execute()
+        if user_res.data and user_res.data[0].get("risk_profile") == "FROZEN":
+            raise HTTPException(
+                status_code=403,
+                detail="Your account has been frozen for security reasons. Login is disabled until your request is reviewed and approved by a security analyst."
+            )
     verified, message = verify_otp(req.session_id, req.otp_code)
     if verified:
         try:
@@ -274,6 +356,50 @@ def verify_otp_endpoint(req: VerifyOtpRequest):
         except Exception:
             pass
     return OtpVerifyResponse(verified=verified, message=message)
+
+
+@router.post("/resend-otp")
+async def resend_otp_endpoint(req: ResendOtpRequest, background_tasks: BackgroundTasks):
+    """Generate a new OTP, invalidating previous ones, and resend it."""
+    session_id = req.session_id
+    
+    # 1. Fetch login event to find user_id
+    login_event = await run_in_threadpool(get_login_event_by_session, session_id)
+    if not login_event:
+        raise HTTPException(status_code=404, detail="Session not found")
+        
+    user_id = login_event.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=400, detail="User not associated with session")
+        
+    # 2. Fetch user to get email
+    sb = get_supabase()
+    user_res = await run_in_threadpool(
+        lambda: sb.table("users").select("email").eq("id", user_id).limit(1).execute()
+    )
+    if not user_res.data:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    user_email = user_res.data[0].get("email", "").strip().lower()
+    if not user_email:
+        raise HTTPException(status_code=400, detail="User email not found")
+        
+    # 3. Generate new OTP
+    generated_otp_code = generate_otp()
+    
+    # 4. Store OTP (this upserts, replacing previous active OTP for the session)
+    await run_in_threadpool(store_otp, session_id, generated_otp_code)
+    
+    # 5. Send email
+    is_real_gmail = bool(user_email.endswith("@gmail.com"))
+    if user_email:
+        background_tasks.add_task(send_email_otp, user_email, generated_otp_code)
+        
+    demo_otp_response = None
+    if not is_real_gmail:
+        demo_otp_response = generated_otp_code
+        
+    return {"message": "OTP resent successfully", "demo_otp": demo_otp_response}
 
 
 @router.post("/continuous")
@@ -303,17 +429,35 @@ def continuous_auth(req: ContinuousAuthRequest):
     return {"status": status, "score": behavior_result["behavior_score"], "flags": all_flags}
 
 @router.post("/freeze")
-def freeze_account(current_user: dict = Depends(get_current_user)):
+def freeze_account(req: FreezeAccountRequest, current_user: dict = Depends(get_current_user)):
     """Emergency Kill Switch: Freeze the user's account."""
     sb = get_supabase()
+    now_str = datetime.now(timezone.utc).isoformat()
     
-    sb.table("users").update({"risk_profile": "FROZEN"}).eq("id", current_user["id"]).execute()
+    try:
+        sb.table("users").update({
+            "risk_profile": "FROZEN",
+            "freeze_status": "PENDING_REVIEW",
+            "freeze_reason": req.reason,
+            "freeze_requested_at": now_str,
+        }).eq("id", current_user["id"]).execute()
+    except Exception as e:
+        logger.warning(f"Could not update extended freeze columns on users table, falling back to risk_profile update: {e}")
+        sb.table("users").update({
+            "risk_profile": "FROZEN"
+        }).eq("id", current_user["id"]).execute()
     
-    from app.services.session_service import create_audit_log
     create_audit_log(
-        event_type="ACCOUNT_FROZEN",
-        description="User triggered emergency kill switch.",
-        metadata={"user_id": current_user["id"], "customer_id": current_user.get("customer_id")}
+        event_type="ACCOUNT_FREEZE_REQUESTED",
+        description=f"User requested emergency account freeze: {req.reason}",
+        metadata={
+            "user_id": current_user["id"],
+            "customer_id": current_user.get("customer_id"),
+            "email": current_user.get("email"),
+            "reason": req.reason,
+            "freeze_status": "PENDING_REVIEW",
+            "timestamp": now_str,
+        }
     )
     
-    return {"status": "success", "message": "Account has been frozen."}
+    return {"status": "success", "message": "Account freeze request submitted successfully. All active sessions terminated."}

@@ -22,6 +22,40 @@ function RecoveryPage() {
   // OTP state
   const [otp, setOtp] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [isResending, setIsResending] = useState(false);
+
+  useEffect(() => {
+    if (!result || timeLeft <= 0) return;
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft, result]);
+
+  const handleResendOtp = async () => {
+    if (isResending || timeLeft > 0 || !result) return;
+    setIsResending(true);
+    try {
+      const resp = await fetch(`${API_BASE}/api/auth/resend-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: result.session_id }),
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        setOtp("");
+        setError("");
+        setTimeLeft(30);
+      } else {
+        setError(data.detail || "Resend failed.");
+      }
+    } catch {
+      setError("Resend request failed.");
+    } finally {
+      setIsResending(false);
+    }
+  };
   
   const [activeSignal, setActiveSignal] = useState(false);
   const signalTimeoutRef = useRef<number | null>(null);
@@ -248,10 +282,25 @@ function RecoveryPage() {
                     <p className="text-[var(--color-text-secondary)] text-sm mb-6">A 6-digit code has been sent to your email.</p>
                     
                     <form onSubmit={verifyOtp} className="space-y-4">
-                      <input required type="text" maxLength={6} value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g, ''))} placeholder="000000" className="w-full text-center tracking-[0.5em] font-mono text-2xl px-4 py-3 bg-black/20 border border-white/5 rounded-xl placeholder:text-white/20 focus:border-[var(--color-bob-orange)] focus:ring-1 focus:ring-[var(--color-bob-orange)]/50 transition-all text-white" />
+                      <div className="text-center mb-2 font-mono text-xs">
+                        {timeLeft > 0 ? (
+                          <span className="text-[var(--color-warning)]">OTP expires in {timeLeft} seconds</span>
+                        ) : (
+                          <span className="text-[var(--color-danger)] font-bold">OTP has expired. Please request a new one.</span>
+                        )}
+                      </div>
+                      <input required type="text" maxLength={6} value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g, ''))} placeholder="000000" disabled={verifying || timeLeft <= 0} className="w-full text-center tracking-[0.5em] font-mono text-2xl px-4 py-3 bg-black/20 border border-white/5 rounded-xl placeholder:text-white/20 focus:border-[var(--color-bob-orange)] focus:ring-1 focus:ring-[var(--color-bob-orange)]/50 transition-all text-white disabled:opacity-50" />
                       {error && <div className="text-sm text-[var(--color-danger)] bg-[var(--color-danger)]/10 border border-[var(--color-danger)]/30 rounded-lg px-4 py-2">{error}</div>}
-                      <button type="submit" disabled={verifying || otp.length !== 6} className="w-full py-3.5 rounded-xl font-semibold bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
+                      <button type="submit" disabled={verifying || otp.length !== 6 || timeLeft <= 0} className="w-full py-3.5 rounded-xl font-semibold bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50">
                         {verifying ? "Verifying..." : "Confirm Identity"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResendOtp}
+                        disabled={timeLeft > 0 || isResending}
+                        className="w-full mt-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white font-bold py-3 rounded-xl transition-all disabled:opacity-50 disabled:hover:translate-y-0 text-xs tracking-wide"
+                      >
+                        {isResending ? "Resending..." : timeLeft > 0 ? `Resend OTP in ${timeLeft}s` : "Resend OTP"}
                       </button>
                     </form>
                   </div>
