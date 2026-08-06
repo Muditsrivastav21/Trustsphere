@@ -8,15 +8,32 @@ from rapidfuzz import fuzz
 from app.utils.logger import logger
 from app.utils.image_decode import decode_image_input
 
+_easyocr_reader = None
+
+
 def get_easyocr_reader():
-    """Lazy load EasyOCR reader to save memory when not needed."""
+    """
+    Lazily load and cache the EasyOCR reader as a module-level singleton.
+    `easyocr.Reader(...)` loads the detection + recognition model weights
+    from disk on construction — several seconds of work. This used to run
+    on *every single call* (every Aadhaar/PAN upload re-built the reader
+    from scratch), which meant every onboarding attempt paid that cost
+    twice (once per document). Cached exactly like ml_service's
+    IsolationForest model load.
+    """
+    global _easyocr_reader
+    if _easyocr_reader is not None:
+        return _easyocr_reader
+
     try:
         import easyocr
         # Use English for now, gpu=False unless they have CUDA
-        return easyocr.Reader(['en'], gpu=False, verbose=False)
+        _easyocr_reader = easyocr.Reader(['en'], gpu=False, verbose=False)
+        logger.info("EasyOCR reader loaded and cached")
     except Exception as e:
         logger.error(f"Failed to load easyocr: {e}")
-        return None
+        _easyocr_reader = None
+    return _easyocr_reader
 
 
 # Markers that should appear on a genuine document of each type. OCR is noisy,

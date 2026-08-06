@@ -7,11 +7,19 @@ the final weighted trust score from component sub-scores.
 from __future__ import annotations
 from app.database.supabase_client import get_supabase
 from app.utils.logger import logger
+from app.constants import (
+    DEFAULT_WEIGHT_DEVICE, DEFAULT_WEIGHT_BEHAVIOR, DEFAULT_WEIGHT_NETWORK,
+    DEFAULT_THRESHOLD_ALLOW, DEFAULT_THRESHOLD_OTP, DEFAULT_THRESHOLD_BLOCK,
+)
 
 
 def _get_weights() -> dict[str, float]:
     """Load scoring weights from the system_config table."""
-    defaults = {"device": 0.45, "behavior": 0.35, "network": 0.20}
+    defaults = {
+        "device": DEFAULT_WEIGHT_DEVICE,
+        "behavior": DEFAULT_WEIGHT_BEHAVIOR,
+        "network": DEFAULT_WEIGHT_NETWORK,
+    }
     try:
         sb = get_supabase()
         result = (
@@ -42,7 +50,11 @@ def _get_thresholds() -> dict[str, int]:
     defaults — otherwise a Supabase outage would make the dashboard display
     different thresholds than what's actually being enforced on login.
     """
-    defaults = {"allow": 80, "otp": 68, "block": 56}
+    defaults = {
+        "allow": DEFAULT_THRESHOLD_ALLOW,
+        "otp": DEFAULT_THRESHOLD_OTP,
+        "block": DEFAULT_THRESHOLD_BLOCK,
+    }
     try:
         sb = get_supabase()
         result = (

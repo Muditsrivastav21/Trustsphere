@@ -6,6 +6,10 @@ Defines the exact JSON shapes the frontend expects.
 from __future__ import annotations
 from pydantic import BaseModel
 from typing import Optional
+from app.constants import (
+    DEFAULT_WEIGHT_DEVICE, DEFAULT_WEIGHT_BEHAVIOR, DEFAULT_WEIGHT_NETWORK,
+    DEFAULT_THRESHOLD_ALLOW, DEFAULT_THRESHOLD_OTP, DEFAULT_THRESHOLD_BLOCK,
+)
 
 
 # ─── Auth / Score ───────────────────────────────────────────
@@ -125,19 +129,19 @@ class GraphResponse(BaseModel):
 # ─── Config ─────────────────────────────────────────────────
 
 class WeightsInfo(BaseModel):
-    device: float = 0.40
-    behavior: float = 0.35
-    network: float = 0.25
+    device: float = DEFAULT_WEIGHT_DEVICE
+    behavior: float = DEFAULT_WEIGHT_BEHAVIOR
+    network: float = DEFAULT_WEIGHT_NETWORK
 
 
 class ThresholdsResponse(BaseModel):
     # Fallback defaults — used only if the system_config table is unreadable.
-    # Must stay in sync with the live system_config row values and with
-    # scoring_engine.py's _get_thresholds() defaults, or the dashboard could
-    # display thresholds that don't match what's actually being enforced.
-    threshold_allow: int = 80
-    threshold_otp: int = 68
-    threshold_block: int = 56
+    # Sourced from app.constants, the single shared source of truth also
+    # used by scoring_engine.py, so the dashboard can never display
+    # thresholds that don't match what's actually being enforced.
+    threshold_allow: int = DEFAULT_THRESHOLD_ALLOW
+    threshold_otp: int = DEFAULT_THRESHOLD_OTP
+    threshold_block: int = DEFAULT_THRESHOLD_BLOCK
     weights: WeightsInfo = WeightsInfo()
 
 

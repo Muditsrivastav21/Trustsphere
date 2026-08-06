@@ -8,34 +8,13 @@ from __future__ import annotations
 
 import math
 from fastapi import APIRouter, Query, Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 from app.database.supabase_client import get_supabase
 from app.models.responses import SessionRow, SessionsListResponse
 from app.utils.logger import logger
-from app.services.session_service import get_user_by_auth_id, is_token_stale
+from app.dependencies import get_current_user
 
 router = APIRouter()
-security = HTTPBearer()
-
-def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
-    sb = get_supabase()
-    try:
-        auth_response = sb.auth.get_user(creds.credentials)
-        if not auth_response or not auth_response.user:
-            raise ValueError()
-        auth_id = auth_response.user.id
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid session token")
-
-    user = get_user_by_auth_id(auth_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if is_token_stale(creds.credentials, user):
-        raise HTTPException(status_code=401, detail="Session expired due to a recent password change. Please sign in again.")
-
-    return user
 
 
 @router.get("", response_model=SessionsListResponse)

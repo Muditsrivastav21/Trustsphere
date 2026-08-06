@@ -20,38 +20,19 @@ from app.engines.network_engine import evaluate_network
 from app.engines.scoring_engine import calculate_trust_score
 from app.services.session_service import (
     create_login_event, create_behavioral_metrics,
-    upsert_device_fingerprint, create_audit_log, get_user_by_auth_id,
-    get_or_create_user_profile, is_token_stale,
+    upsert_device_fingerprint, create_audit_log,
+    get_or_create_user_profile,
 )
 from app.services.graph_service import write_login_to_graph
 from app.services.otp_service import generate_otp, store_otp, verify_otp, send_email_otp
 from app.utils.session_id import generate_session_id
 from app.utils.logger import logger
 from app.utils.rate_limiter import limiter
+from app.dependencies import security, get_current_user
 
 from app.database.supabase_client import get_supabase
 
 router = APIRouter()
-security = HTTPBearer()
-
-def get_current_user(creds: HTTPAuthorizationCredentials = Depends(security)):
-    sb = get_supabase()
-    try:
-        auth_response = sb.auth.get_user(creds.credentials)
-        if not auth_response or not auth_response.user:
-            raise ValueError()
-        auth_id = auth_response.user.id
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid session token")
-
-    user = get_user_by_auth_id(auth_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    if is_token_stale(creds.credentials, user):
-        raise HTTPException(status_code=401, detail="Session expired due to a recent password change. Please sign in again.")
-
-    return user
 
 @router.get("/me")
 async def get_me(current_user: dict = Depends(get_current_user)):
@@ -296,7 +277,7 @@ def verify_otp_endpoint(request: Request, req: VerifyOtpRequest):
 
 
 @router.post("/continuous")
-def continuous_auth(req: ContinuousAuthRequest):
+def continuous_auth(req: ContinuousAuthRequest, background_tasks: BackgroundTasks):
     """Evaluates behavior signals continuously post-login."""
     behavior_dict = req.behavior.model_dump()
     behavior_result = evaluate_behavior(behavior_dict)
@@ -305,21 +286,49 @@ def continuous_auth(req: ContinuousAuthRequest):
     if behavior_result["behavior_score"] < 50:
         status = "SUSPICIOUS"
 
-    from app.services.session_service import evaluate_mid_session_hijack
+    from app.services.session_service import evaluate_mid_session_hijack, get_login_event_by_session, get_user_by_id
     device_dict = req.device.model_dump() if req.device else None
-    
+
     hijack_flags = evaluate_mid_session_hijack(
         session_id=req.session_id,
         current_ip=req.ip_address,
         current_device_dict=device_dict,
         current_behavior_score=behavior_result["behavior_score"]
     )
-    
+
     all_flags = behavior_result["flags"] + hijack_flags
     if hijack_flags:
         status = "BLOCK" if "MID_SESSION_DEVICE_CHANGE" in hijack_flags or "MID_SESSION_IP_CHANGE" in hijack_flags else "SUSPICIOUS"
 
-    return {"status": status, "score": behavior_result["behavior_score"], "flags": all_flags}
+    # A step-up OTP challenge is only solvable if a *fresh* OTP actually
+    # exists for this session. The original login OTP (if one was even
+    # issued — an ALLOW login never generates one) is single-use and gets
+    # marked used the moment it's verified, so re-showing the "Session
+    # Hijack Detected" modal previously had no OTP it could ever match
+    # against. Issue a brand-new one here whenever we lock the session.
+    demo_otp_response = None
+    if status == "BLOCK":
+        try:
+            login_event = get_login_event_by_session(req.session_id)
+            user_id = login_event.get("user_id") if login_event else None
+            user = get_user_by_id(user_id) if user_id else None
+            user_email = ((user or {}).get("email") or "").strip().lower()
+
+            otp_code = generate_otp()
+            store_otp(req.session_id, otp_code)
+            logger.info(f"Step-up OTP issued for mid-session lock on session {req.session_id}")
+
+            is_real_gmail = bool(user_email and user_email.endswith("@gmail.com"))
+            if user_email:
+                background_tasks.add_task(send_email_otp, user_email, otp_code)
+            if not is_real_gmail:
+                # Demo/non-deliverable accounts: surface the code directly
+                # so the lock screen is actually demonstrable end-to-end.
+                demo_otp_response = otp_code
+        except Exception as e:
+            logger.warning(f"Failed to issue step-up OTP for session {req.session_id}: {e}")
+
+    return {"status": status, "score": behavior_result["behavior_score"], "flags": all_flags, "demo_otp": demo_otp_response}
 
 @router.post("/freeze")
 def freeze_account(current_user: dict = Depends(get_current_user)):

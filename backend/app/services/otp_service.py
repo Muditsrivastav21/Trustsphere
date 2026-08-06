@@ -5,7 +5,7 @@ Generates, stores, and verifies one-time passwords.
 
 from __future__ import annotations
 
-import random
+import secrets
 import string
 from datetime import datetime, timedelta, timezone
 
@@ -19,8 +19,13 @@ from app.config.settings import settings
 
 
 def generate_otp() -> str:
-    """Return a random 6-digit numeric OTP."""
-    return "".join(random.choices(string.digits, k=6))
+    """
+    Return a cryptographically random 6-digit numeric OTP.
+    Uses `secrets` rather than `random` — this code gates account access,
+    and `random`'s Mersenne Twister state is not suitable for anything
+    security-sensitive (it's predictable from enough prior outputs).
+    """
+    return "".join(secrets.choice(string.digits) for _ in range(6))
 
 def send_email_otp(to_email: str, otp_code: str) -> None:
     """Send OTP via Gmail SMTP."""

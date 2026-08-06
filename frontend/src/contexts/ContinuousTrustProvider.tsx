@@ -13,6 +13,7 @@ export function ContinuousTrustProvider({ children }: { children: React.ReactNod
   const [isLocked, setIsLocked] = useState(false);
   const { role } = useAuth();
   const [otp, setOtp] = useState("");
+  const [demoOtp, setDemoOtp] = useState<string | null>(null);
 
   const resultStr = typeof window !== "undefined" ? sessionStorage.getItem("trustsphere_result") : null;
   const result = resultStr ? JSON.parse(resultStr) : null;
@@ -91,6 +92,7 @@ export function ContinuousTrustProvider({ children }: { children: React.ReactNod
           setTrustScore(data.score);
           if (data.status === "BLOCK") {
             setIsLocked(true);
+            setDemoOtp(data.demo_otp || null);
           } else if (data.status === "SUSPICIOUS") {
             console.warn("Suspicious activity detected, trust score dropped.");
           }
@@ -131,6 +133,7 @@ export function ContinuousTrustProvider({ children }: { children: React.ReactNod
           setTrustScore(100);
           setIsLocked(false);
           setOtp("");
+          setDemoOtp(null);
         } else {
           alert("Invalid OTP");
         }
@@ -190,7 +193,7 @@ export function ContinuousTrustProvider({ children }: { children: React.ReactNod
                   ))}
                 </div>
                 
-                <button 
+                <button
                   onClick={() => {
                     if (otp.length === 6) resetTrust();
                   }}
@@ -199,6 +202,19 @@ export function ContinuousTrustProvider({ children }: { children: React.ReactNod
                 >
                   Verify Identity
                 </button>
+
+                {demoOtp ? (
+                  <div className="text-[12px] text-[var(--color-danger)] mt-5 text-center font-mono font-bold uppercase tracking-widest bg-[var(--color-danger)]/10 py-2.5 rounded-lg border border-[var(--color-danger)]/20 shadow-sm">
+                    Demo Mode OTP: {demoOtp}
+                  </div>
+                ) : (
+                  <div className="text-[12px] text-[var(--color-text-dim)] mt-5 text-center font-mono uppercase tracking-widest bg-white/5 py-2.5 px-4 rounded-lg border border-white/10 flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 002-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                    <span>OTP sent to your registered email address</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

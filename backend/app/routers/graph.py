@@ -6,18 +6,25 @@ GET /api/graph/node/{node_id}  — detail for one node
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends
 from app.services.graph_service import read_graph_nodes
 from app.models.responses import GraphResponse
+from app.dependencies import require_analyst_or_admin
 
 router = APIRouter()
 
 
 @router.get("/nodes", response_model=GraphResponse)
-async def get_graph_nodes(filter: str = Query("all")):
+async def get_graph_nodes(
+    filter: str = Query("all"),
+    current_user: dict = Depends(require_analyst_or_admin),
+):
     """
     Return graph nodes and edges for the D3 force layout.
     filter = 'all' | 'fraud_only'
+    Analyst/admin-only — this graph contains other customers' names,
+    emails, IPs and devices, so it previously leaked PII to anyone who
+    could hit the endpoint unauthenticated.
     """
     data = read_graph_nodes(filter_type=filter)
     return GraphResponse(
@@ -27,9 +34,10 @@ async def get_graph_nodes(filter: str = Query("all")):
 
 
 @router.post("/simulate")
-async def post_simulate_fraud_ring():
+async def post_simulate_fraud_ring(current_user: dict = Depends(require_analyst_or_admin)):
     """
     Inject simulated fraud ring into Neo4j/Mock DB.
+    Analyst/admin-only — this mutates shared demo/graph state.
     """
     from app.services.graph_service import simulate_fraud_ring
     res = simulate_fraud_ring()
